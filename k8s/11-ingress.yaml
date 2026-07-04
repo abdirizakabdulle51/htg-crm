@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: htg-crm-ingress
+  namespace: htg-crm-prod
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  tls:
+    - hosts:
+        - crm.htgclouds.com
+        - api.crm.htgclouds.com
+      secretName: htg-crm-tls
+  rules:
+    - host: crm.htgclouds.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: crm-frontend
+                port:
+                  number: 3000
+    - host: api.crm.htgclouds.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: crm-api
+                port:
+                  number: 8080

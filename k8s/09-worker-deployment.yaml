@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crm-workers
+  namespace: htg-crm-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crm-workers
+  template:
+    metadata:
+      labels:
+        app: crm-workers
+    spec:
+      containers:
+        - name: usage-sync-worker
+          image: ghcr.io/htgclouds/crm-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          args: ["--job", "usage-sync"]
+          envFrom:
+            - configMapRef:
+                name: htg-crm-config
+            - secretRef:
+                name: htg-crm-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+        - name: ai-analysis-worker
+          image: ghcr.io/htgclouds/crm-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          args: ["--job", "ai-analysis"]
+          envFrom:
+            - configMapRef:
+                name: htg-crm-config
+            - secretRef:
+                name: htg-crm-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+        - name: daily-coach-worker
+          image: ghcr.io/htgclouds/crm-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          args: ["--job", "daily-coach"]
+          envFrom:
+            - configMapRef:
+                name: htg-crm-config
+            - secretRef:
+                name: htg-crm-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+        - name: embedding-refresh-worker
+          image: ghcr.io/htgclouds/crm-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          args: ["--job", "embedding-refresh"]
+          envFrom:
+            - configMapRef:
+                name: htg-crm-config
+            - secretRef:
+                name: htg-crm-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"

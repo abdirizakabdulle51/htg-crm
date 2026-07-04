@@ -1,0 +1,2 @@
+ALTER TABLE regions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_regions_type ON regions(type);

@@ -1,0 +1,4 @@
+ALTER TABLE activities
+  ADD COLUMN IF NOT EXISTS ai_output JSONB,
+  ADD COLUMN IF NOT EXISTS ai_summary TEXT,
+  ADD COLUMN IF NOT EXISTS next_action_notes TEXT;

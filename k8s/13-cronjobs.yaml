@@ -1,0 +1,115 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: usage-sync
+  namespace: htg-crm-prod
+spec:
+  schedule: "0 1 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: crm-cronjob
+            job: usage-sync
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: usage-sync
+              image: ghcr.io/htgclouds/crm-api:1.0.0
+              args: ["--job", "usage-sync"]
+              envFrom:
+                - configMapRef:
+                    name: htg-crm-config
+                - secretRef:
+                    name: htg-crm-secrets
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-coach
+  namespace: htg-crm-prod
+spec:
+  schedule: "0 7 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: crm-cronjob
+            job: daily-coach
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: daily-coach
+              image: ghcr.io/htgclouds/crm-api:1.0.0
+              args: ["--job", "daily-coach"]
+              envFrom:
+                - configMapRef:
+                    name: htg-crm-config
+                - secretRef:
+                    name: htg-crm-secrets
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renewal-reminders
+  namespace: htg-crm-prod
+spec:
+  schedule: "0 9 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: crm-cronjob
+            job: renewal-reminders
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: renewal-reminders
+              image: ghcr.io/htgclouds/crm-api:1.0.0
+              args: ["--job", "renewal-reminders"]
+              envFrom:
+                - configMapRef:
+                    name: htg-crm-config
+                - secretRef:
+                    name: htg-crm-secrets
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ai-analysis-placeholder
+  namespace: htg-crm-prod
+  annotations:
+    note: "AI analysis is queue-triggered from htgcrm.ai.nightly_sync_complete; this placeholder is suspended intentionally."
+spec:
+  schedule: "0 2 * * *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: crm-cronjob
+            job: ai-analysis
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: ai-analysis
+              image: ghcr.io/htgclouds/crm-api:1.0.0
+              args: ["--job", "ai-analysis"]
+              envFrom:
+                - configMapRef:
+                    name: htg-crm-config
+                - secretRef:
+                    name: htg-crm-secrets

@@ -1,0 +1,129 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+env:
+  SWR_REGISTRY: swr.af-south-1.myhuaweicloud.com
+  SWR_NAMESPACE: htg-crm
+  K8S_NAMESPACE: htg-crm-prod
+
+jobs:
+  build-push:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+      deploy_time: ${{ steps.meta.outputs.deploy_time }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve deploy metadata
+        id: meta
+        run: |
+          echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          echo "deploy_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Huawei SWR
+        run: |
+          docker login "$SWR_REGISTRY" \
+            -u "${{ secrets.HUAWEI_SWR_AK }}@${{ secrets.HUAWEI_PROJECT_ID }}" \
+            -p "${{ secrets.HUAWEI_SWR_SK }}"
+
+      - name: Build API image
+        run: |
+          docker build \
+            -t "$SWR_REGISTRY/$SWR_NAMESPACE/api:${{ steps.meta.outputs.sha }}" \
+            -f Dockerfile .
+
+      - name: Build worker image
+        run: |
+          docker build \
+            -t "$SWR_REGISTRY/$SWR_NAMESPACE/worker:${{ steps.meta.outputs.sha }}" \
+            -f Dockerfile .
+
+      - name: Build frontend image
+        run: |
+          docker build \
+            -t "$SWR_REGISTRY/$SWR_NAMESPACE/frontend:${{ steps.meta.outputs.sha }}" \
+            -f htg-crm-frontend/Dockerfile htg-crm-frontend
+
+      - name: Push images
+        run: |
+          docker push "$SWR_REGISTRY/$SWR_NAMESPACE/api:${{ steps.meta.outputs.sha }}"
+          docker push "$SWR_REGISTRY/$SWR_NAMESPACE/worker:${{ steps.meta.outputs.sha }}"
+          docker push "$SWR_REGISTRY/$SWR_NAMESPACE/frontend:${{ steps.meta.outputs.sha }}"
+
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    needs: build-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup kubectl
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Update image tags
+        run: |
+          kubectl set image deployment/crm-api \
+            crm-api="$SWR_REGISTRY/$SWR_NAMESPACE/api:${{ needs.build-push.outputs.sha }}" \
+            -n "$K8S_NAMESPACE"
+          kubectl set image deployment/crm-frontend \
+            crm-frontend="$SWR_REGISTRY/$SWR_NAMESPACE/frontend:${{ needs.build-push.outputs.sha }}" \
+            -n "$K8S_NAMESPACE"
+          kubectl set image deployment/crm-workers \
+            usage-sync-worker="$SWR_REGISTRY/$SWR_NAMESPACE/worker:${{ needs.build-push.outputs.sha }}" \
+            ai-analysis-worker="$SWR_REGISTRY/$SWR_NAMESPACE/worker:${{ needs.build-push.outputs.sha }}" \
+            daily-coach-worker="$SWR_REGISTRY/$SWR_NAMESPACE/worker:${{ needs.build-push.outputs.sha }}" \
+            embedding-refresh-worker="$SWR_REGISTRY/$SWR_NAMESPACE/worker:${{ needs.build-push.outputs.sha }}" \
+            -n "$K8S_NAMESPACE"
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/crm-api -n "$K8S_NAMESPACE" --timeout=300s
+          kubectl rollout status deployment/crm-frontend -n "$K8S_NAMESPACE" --timeout=300s
+          kubectl rollout status deployment/crm-workers -n "$K8S_NAMESPACE" --timeout=300s
+
+      - name: Smoke test
+        run: curl -f https://api.crm.htgclouds.com/api/v1/health
+
+      - name: Roll back API on failure
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/crm-api -n "$K8S_NAMESPACE" || true
+          kubectl rollout undo deployment/crm-frontend -n "$K8S_NAMESPACE" || true
+          kubectl rollout undo deployment/crm-workers -n "$K8S_NAMESPACE" || true
+
+      - name: Slack notification
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DEPLOY_STATUS: ${{ job.status }}
+          COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+          DEPLOY_SHA: ${{ needs.build-push.outputs.sha }}
+          DEPLOY_TIME: ${{ needs.build-push.outputs.deploy_time }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL is not set; skipping Slack notification"
+            exit 0
+          fi
+          payload=$(jq -n \
+            --arg status "$DEPLOY_STATUS" \
+            --arg message "$COMMIT_MESSAGE" \
+            --arg sha "$DEPLOY_SHA" \
+            --arg deploy_time "$DEPLOY_TIME" \
+            '{text: ("HTG CRM deploy " + $status + ": commit " + $message + " (" + $sha + ") at " + $deploy_time)}')
+          curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"

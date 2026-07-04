@@ -1,0 +1,8 @@
+ALTER TYPE tenant_status ADD VALUE IF NOT EXISTS 'PROSPECT';
+
+ALTER TABLE tenants
+  ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id),
+  ADD COLUMN IF NOT EXISTS hcs_account_id TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS huawei_region TEXT NOT NULL DEFAULT 'af-south-1';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_lead_id_unique ON tenants(lead_id) WHERE lead_id IS NOT NULL;

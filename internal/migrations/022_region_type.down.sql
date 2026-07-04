@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_regions_type;
+ALTER TABLE regions DROP COLUMN IF EXISTS type;

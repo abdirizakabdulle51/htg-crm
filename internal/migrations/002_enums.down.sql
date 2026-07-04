@@ -1,0 +1,13 @@
+DROP TYPE IF EXISTS audit_action;
+DROP TYPE IF EXISTS sync_status;
+DROP TYPE IF EXISTS ai_recommendation_status;
+DROP TYPE IF EXISTS ai_recommendation_type;
+DROP TYPE IF EXISTS opportunity_stage;
+DROP TYPE IF EXISTS contract_status;
+DROP TYPE IF EXISTS activity_status;
+DROP TYPE IF EXISTS activity_type;
+DROP TYPE IF EXISTS service_status;
+DROP TYPE IF EXISTS tenant_status;
+DROP TYPE IF EXISTS lead_status;
+DROP TYPE IF EXISTS lead_stage;
+DROP TYPE IF EXISTS user_role;
