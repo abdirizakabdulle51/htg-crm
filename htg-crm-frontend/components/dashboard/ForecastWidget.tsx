@@ -10,6 +10,7 @@ import type { ForecastResponse } from "@/types/crm";
 
 type ForecastWidgetProps = {
   forecast?: ForecastResponse | null;
+  targetUsd?: number;
 };
 
 function confidenceClass(confidence?: string) {
@@ -18,9 +19,12 @@ function confidenceClass(confidence?: string) {
   return "bg-amber-500 text-white";
 }
 
-export function ForecastWidget({ forecast }: ForecastWidgetProps) {
+export function ForecastWidget({ forecast, targetUsd }: ForecastWidgetProps) {
   const updatedMinutes = useMemo(() => new Date().getMinutes(), []);
-  const pct = Math.max(0, Math.min(140, forecast?.forecast_vs_target_pct ?? 0));
+  const target = targetUsd ?? forecast?.target_usd ?? 0;
+  const forecastVsTargetPct =
+    forecast && target > 0 ? (forecast.adjusted_forecast_usd / target) * 100 : forecast?.forecast_vs_target_pct ?? 0;
+  const pct = Math.max(0, Math.min(140, forecastVsTargetPct));
   const chartData = [{ name: "forecast", value: pct, fill: pct >= 100 ? "#22c55e" : pct >= 80 ? "#f59e0b" : "#ef4444" }];
 
   return (
@@ -46,13 +50,13 @@ export function ForecastWidget({ forecast }: ForecastWidgetProps) {
                   </RadialBarChart>
                 </ResponsiveContainer>
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="text-xl font-semibold">{Math.round(forecast.forecast_vs_target_pct)}%</span>
+                  <span className="text-xl font-semibold">{Math.round(forecastVsTargetPct)}%</span>
                 </div>
               </div>
               <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">{forecast.period}</p>
                 <p className="text-xl font-semibold">{formatUSD(forecast.adjusted_forecast_usd)}</p>
-                <p className="text-xs text-muted-foreground">Target {formatUSD(forecast.target_usd)}</p>
+                <p className="text-xs text-muted-foreground">Target {formatUSD(target)}</p>
                 <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{forecast.narrative}</p>
               </div>
             </div>

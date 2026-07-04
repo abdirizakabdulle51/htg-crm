@@ -12,12 +12,13 @@ type CompanyKPIBarProps = {
   forecast?: ForecastResponse | null;
   tenants?: Tenant[] | null;
   atRisk?: Tenant[] | null;
+  q3Target?: number;
 };
 
-export function CompanyKPIBar({ pipeline, team, forecast, tenants, atRisk }: CompanyKPIBarProps) {
+export function CompanyKPIBar({ pipeline, team, forecast, tenants, atRisk, q3Target }: CompanyKPIBarProps) {
   const rows = team ?? [];
   const tenantRows = tenants ?? [];
-  const target = rows.reduce((sum, member) => sum + quarterlyTarget(member), 0);
+  const target = q3Target ?? rows.reduce((sum, member) => sum + quarterlyTarget(member), 0);
   const achieved = rows.reduce((sum, member) => sum + member.achieved_usd, 0);
   const totalARR = tenantRows.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
   const activeTenants = tenantRows.filter((tenant) => tenant.status === "ACTIVE").length;

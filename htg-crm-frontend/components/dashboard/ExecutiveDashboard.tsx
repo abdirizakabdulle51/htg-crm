@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { Target } from "lucide-react";
 
@@ -23,9 +23,22 @@ import type {
 } from "@/types/crm";
 
 const fetcher = <T,>(url: string) => apiFetch<T>(url);
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
+
+type TargetsApiResponse = {
+  targets?: Array<{
+    country?: string | null;
+    account_manager_id?: string | null;
+    target_arr_usd: number;
+  }>;
+};
 
 export function ExecutiveDashboard() {
   const [showTargets, setShowTargets] = useState(false);
+  const [q3Target, setQ3Target] = useState(0);
+  const [countryTargets, setCountryTargets] = useState<Record<string, number>>({});
+  const quarter = 3;
+  const year = 2026;
   const { data: pipeline } = useSWR<PipelineOverview>("/api/v1/pipeline/overview", fetcher, {
     refreshInterval: 60000,
   });
@@ -48,6 +61,23 @@ export function ExecutiveDashboard() {
     refreshInterval: 120000,
   });
 
+  useEffect(() => {
+    fetch(`${API}/api/v1/targets?quarter=${quarter}&year=${year}`, { credentials: "include" })
+      .then((response) => response.json())
+      .then((data: TargetsApiResponse) => {
+        const countryTargetRows = (data.targets ?? []).filter((target) => !target.account_manager_id);
+        const total = countryTargetRows.reduce((sum, target) => sum + target.target_arr_usd, 0);
+        setQ3Target(total);
+
+        const byCountry: Record<string, number> = {};
+        for (const target of countryTargetRows) {
+          if (target.country) byCountry[target.country] = target.target_arr_usd;
+        }
+        setCountryTargets(byCountry);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 flex justify-end">
@@ -64,13 +94,19 @@ export function ExecutiveDashboard() {
           atRisk={atRisk}
           forecast={forecast}
           pipeline={pipeline}
+          q3Target={q3Target}
           team={teamHealth?.team}
           tenants={tenants}
         />
       </div>
 
       <div className="col-span-12 h-80 xl:col-span-6">
-        <RevenueByCountryChart countries={pipeline?.by_country} team={teamHealth?.team} tenants={tenants} />
+        <RevenueByCountryChart
+          countries={pipeline?.by_country}
+          countryTargets={countryTargets}
+          team={teamHealth?.team}
+          tenants={tenants}
+        />
       </div>
       <div className="col-span-12 h-80 xl:col-span-6">
         <RevenueBySectoChart sectors={pipeline?.by_sector} tenants={tenants} />
@@ -80,7 +116,7 @@ export function ExecutiveDashboard() {
         <TeamLeaderboard countries={pipeline?.by_country} team={teamHealth?.team} />
       </div>
       <div className="col-span-12 h-96 xl:col-span-4">
-        <ForecastWidget forecast={forecast} />
+        <ForecastWidget forecast={forecast} targetUsd={q3Target} />
       </div>
       <div className="col-span-12 h-96 xl:col-span-3">
         <AIGrowthOpportunities recommendations={recs?.recommendations} />

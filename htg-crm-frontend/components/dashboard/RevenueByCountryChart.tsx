@@ -12,17 +12,20 @@ type RevenueByCountryChartProps = {
   countries?: PipelineCountryBreakdown[] | null;
   tenants?: Tenant[] | null;
   team?: TeamTarget[] | null;
+  countryTargets?: Record<string, number>;
 };
 
-export function RevenueByCountryChart({ countries, tenants, team }: RevenueByCountryChartProps) {
+export function RevenueByCountryChart({ countries, tenants, team, countryTargets }: RevenueByCountryChartProps) {
   const rows = countries?.length
     ? countries.map((country) => {
         const countryTenantARR = (tenants ?? [])
           .filter((tenant) => tenant.country_id === country.country_id)
           .reduce((sum, tenant) => sum + tenantARR(tenant), 0);
-        const target = (team ?? [])
-          .filter((member) => member.country_office_id === country.country_id)
-          .reduce((sum, member) => sum + quarterlyTarget(member), 0);
+        const target =
+          countryTargets?.[country.country] ??
+          (team ?? [])
+            .filter((member) => member.country_office_id === country.country_id)
+            .reduce((sum, member) => sum + quarterlyTarget(member), 0);
 
         return {
           name: country.country,
@@ -35,7 +38,7 @@ export function RevenueByCountryChart({ countries, tenants, team }: RevenueByCou
         name: item.name,
         pipeline_value: item.revenue,
         tenant_arr: item.revenue * 0.7,
-        target: item.target ?? 0,
+        target: countryTargets?.[item.name] ?? item.target ?? 0,
       }));
 
   return (
