@@ -27,6 +27,7 @@ import (
 	usersmodule "github.com/htgclouds/crm-api/internal/modules/users"
 	"github.com/htgclouds/crm-api/internal/queue"
 	"github.com/htgclouds/crm-api/internal/response"
+	"github.com/htgclouds/crm-api/internal/targets"
 	"github.com/htgclouds/crm-api/internal/workers"
 )
 
@@ -134,6 +135,7 @@ func main() {
 	reportsHandler := reportsmodule.NewHandler(reportsmodule.NewService(reportsmodule.NewRepository()))
 
 	usersmodule.RegisterRoutes(api, usersHandler)
+	targets.RegisterRoutes(api, postgresPool)
 	targetsmodule.RegisterRoutes(api.Group("/targets"), targetsHandler)
 	pipelinemodule.RegisterRoutes(api.Group("/pipeline"), pipelineHandler)
 	pipelinemodule.RegisterLeadRoutes(api.Group("/leads"), pipelineHandler)

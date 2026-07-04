@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
+import { Target } from "lucide-react";
 
 import { AIGrowthOpportunities } from "@/components/dashboard/AIGrowthOpportunities";
 import { ChurnRiskSummary } from "@/components/dashboard/ChurnRiskSummary";
@@ -9,6 +11,7 @@ import { ForecastWidget } from "@/components/dashboard/ForecastWidget";
 import { PipelineHeatmap } from "@/components/dashboard/PipelineHeatmap";
 import { RevenueByCountryChart } from "@/components/dashboard/RevenueByCountryChart";
 import { RevenueBySectoChart } from "@/components/dashboard/RevenueBySectoChart";
+import SetTargetsModal from "@/components/dashboard/SetTargetsModal";
 import { TeamLeaderboard } from "@/components/dashboard/TeamLeaderboard";
 import { apiFetch } from "@/lib/api";
 import type {
@@ -22,6 +25,7 @@ import type {
 const fetcher = <T,>(url: string) => apiFetch<T>(url);
 
 export function ExecutiveDashboard() {
+  const [showTargets, setShowTargets] = useState(false);
   const { data: pipeline } = useSWR<PipelineOverview>("/api/v1/pipeline/overview", fetcher, {
     refreshInterval: 60000,
   });
@@ -46,6 +50,15 @@ export function ExecutiveDashboard() {
 
   return (
     <div className="grid grid-cols-12 gap-4">
+      <div className="col-span-12 flex justify-end">
+        <button
+          onClick={() => setShowTargets(true)}
+          className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700"
+        >
+          <Target className="h-4 w-4" /> Set Targets
+        </button>
+      </div>
+
       <div className="col-span-12">
         <CompanyKPIBar
           atRisk={atRisk}
@@ -79,6 +92,8 @@ export function ExecutiveDashboard() {
       <div className="col-span-12 h-96 xl:col-span-4">
         <ChurnRiskSummary team={teamHealth?.team} tenants={atRisk} />
       </div>
+
+      <SetTargetsModal open={showTargets} onClose={() => setShowTargets(false)} />
     </div>
   );
 }

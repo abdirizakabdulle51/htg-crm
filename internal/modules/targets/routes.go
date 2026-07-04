@@ -7,7 +7,7 @@ import (
 )
 
 func RegisterRoutes(router *gin.RouterGroup, handler *Handler) {
-	router.POST("", middleware.AuthMiddleware(), middleware.RequireRole(middleware.RoleCountryGM, middleware.RoleHOB, middleware.RoleCEO), handler.Create)
+	router.POST("/annual", middleware.AuthMiddleware(), middleware.RequireRole(middleware.RoleCountryGM, middleware.RoleHOB, middleware.RoleCEO), handler.Create)
 	router.GET("/mine", middleware.AuthMiddleware(), handler.Mine)
 	router.GET("/health", middleware.AuthMiddleware(), handler.MyHealth)
 	router.GET("/health/:user_id", middleware.AuthMiddleware(), middleware.RequireRole(middleware.RoleCountryGM, middleware.RoleHOB, middleware.RoleCEO), handler.UserHealth)

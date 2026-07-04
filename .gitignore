@@ -1,3 +1,4 @@
 .env.local
 test_pg.go
+api*.log
 bin/
