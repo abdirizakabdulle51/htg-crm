@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import useSWR from "swr";
 import { Target } from "lucide-react";
 
@@ -34,6 +35,7 @@ type TargetsApiResponse = {
 };
 
 export function ExecutiveDashboard() {
+  const { data: session } = useSession();
   const [showTargets, setShowTargets] = useState(false);
   const [q3Target, setQ3Target] = useState(0);
   const [countryTargets, setCountryTargets] = useState<Record<string, number>>({});
@@ -62,21 +64,33 @@ export function ExecutiveDashboard() {
   });
 
   useEffect(() => {
-    fetch(`${API}/api/v1/targets?quarter=${quarter}&year=${year}`, { credentials: "include" })
-      .then((response) => response.json())
-      .then((data: TargetsApiResponse) => {
-        const countryTargetRows = (data.targets ?? []).filter((target) => !target.account_manager_id);
-        const total = countryTargetRows.reduce((sum, target) => sum + target.target_arr_usd, 0);
+    if (!session) return;
+
+    const token = (session as any)?.accessToken ?? "";
+    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+
+    fetch(`${API}/api/v1/targets?quarter=3&year=2026`, { headers, credentials: "include" })
+      .then((r) => {
+        if (!r.ok) {
+          console.error("targets fetch failed", r.status);
+          return null;
+        }
+        return r.json();
+      })
+      .then((data: TargetsApiResponse | null) => {
+        if (!data) return;
+        const countryTargets = (data.targets ?? []).filter((t: any) => !t.account_manager_id);
+        const total = countryTargets.reduce((sum: number, t: any) => sum + t.target_arr_usd, 0);
         setQ3Target(total);
 
         const byCountry: Record<string, number> = {};
-        for (const target of countryTargetRows) {
-          if (target.country) byCountry[target.country] = target.target_arr_usd;
+        for (const t of countryTargets) {
+          if (t.country) byCountry[t.country] = t.target_arr_usd;
         }
         setCountryTargets(byCountry);
       })
-      .catch(() => {});
-  }, []);
+      .catch((e) => console.error("targets fetch error", e));
+  }, [session]);
 
   return (
     <div className="grid grid-cols-12 gap-4">
