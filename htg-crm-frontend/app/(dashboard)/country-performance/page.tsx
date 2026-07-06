@@ -112,10 +112,11 @@ export default function CountryPerformancePage() {
       .filter((lead) => lead.country_id === countryID)
       .reduce((sum, lead) => sum + (lead.value_usd ?? 0), 0);
     const target = targetByCountry.get(country.name) ?? 0;
+    const totalARR = countryTenants.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
 
     return {
       ...country,
-      totalARR: countryTenants.reduce((sum, tenant) => sum + tenantARR(tenant), 0),
+      totalARR,
       q3Target: target,
       achievement: achievementPercent(achieved, target),
       revenueGap: Math.max(target - achieved, 0),
@@ -123,7 +124,7 @@ export default function CountryPerformancePage() {
       atRiskTenants: countryTenants.filter((tenant) => (tenant.risk_score ?? 0) >= 60 || tenant.status === "AT_RISK").length,
       pipelineValue: pipelineByCountry.get(country.name) ?? 0,
     };
-  });
+  }).sort((a, b) => b.totalARR - a.totalARR);
 
   return (
     <div className="space-y-5">
@@ -144,7 +145,7 @@ export default function CountryPerformancePage() {
             <CardContent className="space-y-4 pt-5">
               <Metric label="Total ARR" value={formatUSD(country.totalARR)} icon={TrendingUp} />
               <Metric label="Q3 Target" value={formatUSD(country.q3Target)} icon={Target} />
-              <Metric label="Achievement" value={country.achievement} icon={TrendingUp} />
+              <Metric label="Achievement" value={country.achievement} detail="Q3 new deals won" icon={TrendingUp} />
               <Metric label="Revenue Gap" value={formatUSD(country.revenueGap)} icon={AlertTriangle} />
               <Metric label="Active Tenants" value={country.activeTenants.toLocaleString("en-US")} icon={Building2} />
               <Metric label="At-Risk Tenants" value={country.atRiskTenants.toLocaleString("en-US")} icon={AlertTriangle} />
@@ -160,10 +161,12 @@ export default function CountryPerformancePage() {
 function Metric({
   label,
   value,
+  detail,
   icon: Icon,
 }: {
   label: string;
   value: string;
+  detail?: string;
   icon: typeof BarChart3;
 }) {
   return (
@@ -171,6 +174,7 @@ function Metric({
       <div>
         <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
         <p className="mt-1 text-lg font-semibold">{value}</p>
+        {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
       </div>
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
     </div>
