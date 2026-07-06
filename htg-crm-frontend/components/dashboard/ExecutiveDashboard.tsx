@@ -62,9 +62,13 @@ export function ExecutiveDashboard() {
   const [countryTargets, setCountryTargets] = useState<Record<string, number>>({});
   const quarter = 3;
   const year = 2026;
-  const { data: pipeline } = useSWR<PipelineOverview>("/api/v1/pipeline/overview", fetcher, {
-    refreshInterval: 60000,
-  });
+  const { data: pipeline } = useSWR<PipelineOverview>(
+    status === "authenticated" && token ? "/api/v1/pipeline" : null,
+    authedFetcher,
+    {
+      refreshInterval: 60000,
+    },
+  );
   const { data: teamHealth } = useSWR<TeamTargetsResponse>(
     status === "authenticated" && token ? "/api/v1/targets/team" : null,
     authedFetcher,

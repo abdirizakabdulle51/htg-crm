@@ -8,6 +8,7 @@ import (
 
 func RegisterRoutes(router *gin.RouterGroup, handler *Handler) {
 	router.Use(middleware.AuthMiddleware(), middleware.ScopeFilter())
+	router.GET("", handler.Overview)
 	router.GET("/overview", handler.Overview)
 	router.GET("/forecast", handler.Forecast)
 }
