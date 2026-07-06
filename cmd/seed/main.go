@@ -32,8 +32,8 @@ func main() {
 			('DJ', 'Djibouti', 'Africa/Djibouti', 'DJF')
 		ON CONFLICT (code) DO NOTHING`,
 		`INSERT INTO sectors (name, description) VALUES
-			('Telecommunications', 'Network and connectivity providers'),
-			('Financial Services', 'Banks, fintech, insurance, and payments'),
+			('Telecom', 'Network and connectivity providers'),
+			('Finance', 'Banks, fintech, insurance, and payments'),
 			('Healthcare', 'Hospitals, clinics, and health technology'),
 			('Government', 'Public sector institutions'),
 			('Education', 'Schools, universities, and training providers'),
