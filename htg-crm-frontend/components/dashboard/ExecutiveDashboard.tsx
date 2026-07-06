@@ -27,11 +27,13 @@ const fetcher = <T,>(url: string) => apiFetch<T>(url);
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 
 type TargetsApiResponse = {
-  targets?: Array<{
-    country?: string | null;
-    account_manager_id?: string | null;
-    target_arr_usd: number;
-  }>;
+  targets?: TargetRow[];
+};
+
+type TargetRow = {
+  country?: string | null;
+  account_manager_id?: string | null;
+  target_arr_usd: number;
 };
 
 type ApiEnvelope<T> = {
@@ -60,8 +62,6 @@ export function ExecutiveDashboard() {
   const [showTargets, setShowTargets] = useState(false);
   const [q3Target, setQ3Target] = useState(0);
   const [countryTargets, setCountryTargets] = useState<Record<string, number>>({});
-  const quarter = 3;
-  const year = 2026;
   const { data: pipeline } = useSWR<PipelineOverview>(
     status === "authenticated" && token ? "/api/v1/pipeline" : null,
     authedFetcher,
@@ -95,7 +95,7 @@ export function ExecutiveDashboard() {
   useEffect(() => {
     if (status === "loading") return;
 
-    const token = (session as any)?.accessToken ?? "";
+    const token = typeof session?.accessToken === "string" ? session.accessToken : "";
     if (!token) {
       console.error("targets fetch skipped: missing access token");
       return;
@@ -113,8 +113,8 @@ export function ExecutiveDashboard() {
       })
       .then((data: TargetsApiResponse | null) => {
         if (!data) return;
-        const countryTargets = (data.targets ?? []).filter((t: any) => !t.account_manager_id);
-        const total = countryTargets.reduce((sum: number, t: any) => sum + t.target_arr_usd, 0);
+        const countryTargets = (data.targets ?? []).filter((t) => !t.account_manager_id);
+        const total = countryTargets.reduce((sum, t) => sum + t.target_arr_usd, 0);
         setQ3Target(total);
 
         const byCountry: Record<string, number> = {};
