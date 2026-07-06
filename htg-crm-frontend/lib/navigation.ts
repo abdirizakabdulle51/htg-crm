@@ -33,7 +33,7 @@ export const roleNavItems: Record<string, NavItem[]> = {
     { href: "/head-of-business/countries", label: "Country Performance", icon: BarChart3 },
     { href: "/revenue",                    label: "Revenue",             icon: DollarSign },
     { href: "/strategic-risks",            label: "Strategic Risks",     icon: AlertTriangle },
-    { href: "/head-of-business/reports",   label: "Reports",             icon: FileText },
+    { href: "/reports",                    label: "Reports",             icon: FileText },
   ],
   CEO: [
     { href: "/ceo",           label: "Dashboard",           icon: LayoutDashboard },
@@ -41,7 +41,7 @@ export const roleNavItems: Record<string, NavItem[]> = {
     { href: "/country-performance", label: "Country Performance", icon: BarChart3 },
     { href: "/revenue",       label: "Revenue",             icon: DollarSign },
     { href: "/strategic-risks", label: "Strategic Risks",     icon: AlertTriangle },
-    { href: "/ceo/reports",   label: "Reports",             icon: FileText },
+    { href: "/reports",      label: "Reports",             icon: FileText },
   ],
   ADMIN: [
     { href: "/ceo",           label: "Dashboard",           icon: LayoutDashboard },
@@ -49,6 +49,6 @@ export const roleNavItems: Record<string, NavItem[]> = {
     { href: "/country-performance", label: "Country Performance", icon: BarChart3 },
     { href: "/revenue",       label: "Revenue",             icon: DollarSign },
     { href: "/strategic-risks", label: "Strategic Risks",     icon: AlertTriangle },
-    { href: "/ceo/reports",   label: "Reports",             icon: FileText },
+    { href: "/reports",      label: "Reports",             icon: FileText },
   ],
 };
