@@ -117,14 +117,11 @@ export function GMDashboard() {
           (session as { accessToken?: string } | null)?.accessToken ??
           "";
 
-        console.log("session", latestSession ?? session);
-
         if (!token) {
           throw new Error("GM dashboard missing access token");
         }
 
-        const tenants = await fetchJson<Tenant[] | { tenants?: Tenant[]; items?: Tenant[] }>("/api/v1/tenants", token);
-        console.log("tenants response", tenants);
+        const tenants = await fetchJson<Tenant[] | { tenants?: Tenant[]; items?: Tenant[] }>("/api/v1/tenants?country=Kenya", token);
 
         const [targets, leads] = await Promise.all([
           fetchJson<TargetsResponse>("/api/v1/targets?quarter=3&year=2026", token),
@@ -156,9 +153,6 @@ export function GMDashboard() {
   }, [session]);
 
   const tenants = useMemo(() => unwrapList<Tenant>(tenantsData), [tenantsData]);
-  if (tenants[0]) {
-    console.log("GM dashboard first tenant", tenants[0]);
-  }
   const countryFromApi =
     tenants.find((tenant) => tenant.country?.toLowerCase() === COUNTRY.toLowerCase())?.country ?? COUNTRY;
   const kenyaTenants = useMemo(
