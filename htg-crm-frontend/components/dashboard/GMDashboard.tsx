@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { useSession } from "next-auth/react";
-import useSWR from "swr";
+import { useEffect, useMemo, useState } from "react";
+import { getSession, useSession } from "next-auth/react";
 import { AlertTriangle, BarChart3, Building2, Target, TrendingUp, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -79,43 +78,82 @@ function leadStage(lead: LeadRow): (typeof STAGES)[number] {
 
 export function GMDashboard() {
   const { data: session } = useSession();
-  const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
-  const canFetch = Boolean(session);
+  const [tenantsData, setTenantsData] = useState<Tenant[]>([]);
+  const [targetsData, setTargetsData] = useState<TargetsResponse>({});
+  const [leadsData, setLeadsData] = useState<LeadsResponse>([]);
+  const [tenantsLoading, setTenantsLoading] = useState(false);
 
-  const authedFetcher = async <T,>(url: string): Promise<T> => {
-    const response = await fetch(`${API}${url}`, {
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    const body = await response.json();
+  useEffect(() => {
+    if (!session) return;
 
-    if (!response.ok) {
-      const envelope = body as ApiEnvelope<T>;
-      throw new Error(envelope.error?.message ?? `Request failed: ${response.status}`);
+    async function fetchJson<T>(url: string, token: string): Promise<T> {
+      const response = await fetch(`${API}${url}`, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const body = await response.json();
+
+      if (!response.ok) {
+        const envelope = body as ApiEnvelope<T>;
+        throw new Error(envelope.error?.message ?? `Request failed: ${response.status}`);
+      }
+
+      if (body && typeof body === "object" && "data" in body && "error" in body) {
+        return (body as ApiEnvelope<T>).data as T;
+      }
+
+      return body as T;
     }
 
-    if (body && typeof body === "object" && "data" in body && "error" in body) {
-      return (body as ApiEnvelope<T>).data as T;
+    let cancelled = false;
+
+    async function loadDashboardData() {
+      setTenantsLoading(true);
+
+      try {
+        const latestSession = await getSession();
+        const token =
+          (latestSession as { accessToken?: string } | null)?.accessToken ??
+          (session as { accessToken?: string } | null)?.accessToken ??
+          "";
+
+        console.log("session", latestSession ?? session);
+
+        if (!token) {
+          throw new Error("GM dashboard missing access token");
+        }
+
+        const tenants = await fetchJson<Tenant[] | { tenants?: Tenant[]; items?: Tenant[] }>("/api/v1/tenants", token);
+        console.log("tenants response", tenants);
+
+        const [targets, leads] = await Promise.all([
+          fetchJson<TargetsResponse>("/api/v1/targets?quarter=3&year=2026", token),
+          fetchJson<LeadsResponse>(`/api/v1/leads?country=${encodeURIComponent(COUNTRY)}`, token),
+        ]);
+
+        if (cancelled) return;
+
+        setTenantsData(unwrapList<Tenant>(tenants));
+        setTargetsData(targets ?? {});
+        setLeadsData(leads ?? []);
+      } catch (error) {
+        console.error("GM dashboard fetch failed", error);
+        if (!cancelled) {
+          setTenantsData([]);
+          setTargetsData({});
+          setLeadsData([]);
+        }
+      } finally {
+        if (!cancelled) setTenantsLoading(false);
+      }
     }
 
-    return body as T;
-  };
+    void loadDashboardData();
 
-  const { data: tenantsData, isLoading: tenantsLoading } = useSWR<Tenant[]>(
-    canFetch ? "/api/v1/tenants" : null,
-    authedFetcher,
-    { refreshInterval: 120000 },
-  );
-  const { data: targetsData } = useSWR<TargetsResponse>(
-    canFetch ? "/api/v1/targets?quarter=3&year=2026" : null,
-    authedFetcher,
-    { refreshInterval: 120000 },
-  );
-  const { data: leadsData } = useSWR<LeadsResponse>(
-    canFetch ? `/api/v1/leads?country=${encodeURIComponent(COUNTRY)}` : null,
-    authedFetcher,
-    { refreshInterval: 60000 },
-  );
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   const tenants = useMemo(() => unwrapList<Tenant>(tenantsData), [tenantsData]);
   if (tenants[0]) {
