@@ -1,4 +1,4 @@
-import { getSession, signIn } from "next-auth/react";
+import { getSession } from "next-auth/react";
 
 type ApiEnvelope<T> = {
   data: T | null;
