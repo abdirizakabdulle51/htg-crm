@@ -37,7 +37,7 @@ export const roleNavItems: Record<string, NavItem[]> = {
   ],
   CEO: [
     { href: "/ceo",           label: "Dashboard",           icon: LayoutDashboard },
-    { href: "/ceo/overview",  label: "Executive Overview",  icon: Globe },
+    { href: "/executive-overview",  label: "Executive Overview",  icon: Globe },
     { href: "/ceo/countries", label: "Country Performance", icon: BarChart3 },
     { href: "/ceo/revenue",   label: "Revenue",             icon: DollarSign },
     { href: "/ceo/risks",     label: "Strategic Risks",     icon: AlertTriangle },
@@ -45,7 +45,7 @@ export const roleNavItems: Record<string, NavItem[]> = {
   ],
   ADMIN: [
     { href: "/ceo",           label: "Dashboard",           icon: LayoutDashboard },
-    { href: "/ceo/overview",  label: "Executive Overview",  icon: Globe },
+    { href: "/executive-overview",  label: "Executive Overview",  icon: Globe },
     { href: "/ceo/countries", label: "Country Performance", icon: BarChart3 },
     { href: "/ceo/revenue",   label: "Revenue",             icon: DollarSign },
     { href: "/ceo/risks",     label: "Strategic Risks",     icon: AlertTriangle },

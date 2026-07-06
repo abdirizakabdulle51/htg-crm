@@ -6,6 +6,7 @@ const routeRoles: Record<string, string[]> = {
   "/country-manager": ["COUNTRY_GM"],
   "/head-of-business": ["HEAD_OF_BUSINESS"],
   "/ceo":             ["CEO", "ADMIN"],
+  "/executive-overview": ["CEO", "ADMIN"],
 };
 
 const roleHomeRoute: Record<string, string> = {
@@ -48,6 +49,7 @@ export const config = {
     "/country-manager/:path*",
     "/head-of-business/:path*",
     "/ceo/:path*",
+    "/executive-overview/:path*",
   ],
 };
 
