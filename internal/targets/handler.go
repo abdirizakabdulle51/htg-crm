@@ -115,7 +115,7 @@ func (h *Handler) Upsert(c *gin.Context) {
 		_, err := h.db.Exec(c.Request.Context(), `
 			INSERT INTO targets (quarter, year, country, account_manager_id, target_arr_usd, set_by)
 			VALUES ($1, $2, $3, $4, $5, $6)
-			ON CONFLICT ON CONSTRAINT targets_unique_idx
+			ON CONFLICT (quarter, year, COALESCE(country, ''), COALESCE(account_manager_id::TEXT, ''))
 			DO UPDATE SET target_arr_usd = EXCLUDED.target_arr_usd,
 			              set_by         = EXCLUDED.set_by,
 			              updated_at     = NOW()
