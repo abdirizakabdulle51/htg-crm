@@ -167,6 +167,7 @@ export interface TeamTarget {
   email: string;
   name: string;
   country_office_id: string;
+  country?: string;
   annual_target_usd: number;
   achieved_usd: number;
   quarterly_target_usd?: number;

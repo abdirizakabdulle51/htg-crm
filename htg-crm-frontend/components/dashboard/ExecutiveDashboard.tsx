@@ -34,8 +34,29 @@ type TargetsApiResponse = {
   }>;
 };
 
+type ApiEnvelope<T> = {
+  data: T | null;
+  error?: {
+    code: string;
+    message: string;
+  } | null;
+};
+
 export function ExecutiveDashboard() {
   const { data: session, status } = useSession();
+  const token = typeof session?.accessToken === "string" ? session.accessToken : "";
+  const authedFetcher = async <T,>(url: string): Promise<T> => {
+    const response = await fetch(`${API}${url}`, {
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const body = (await response.json()) as ApiEnvelope<T>;
+    if (!response.ok || body.error) {
+      console.error("authenticated fetch failed", url, response.status, body.error);
+      throw new Error(body.error?.message ?? `Request failed: ${response.status}`);
+    }
+    return body.data as T;
+  };
   const [showTargets, setShowTargets] = useState(false);
   const [q3Target, setQ3Target] = useState(0);
   const [countryTargets, setCountryTargets] = useState<Record<string, number>>({});
@@ -44,9 +65,13 @@ export function ExecutiveDashboard() {
   const { data: pipeline } = useSWR<PipelineOverview>("/api/v1/pipeline/overview", fetcher, {
     refreshInterval: 60000,
   });
-  const { data: teamHealth } = useSWR<TeamTargetsResponse>("/api/v1/targets/team", fetcher, {
-    refreshInterval: 120000,
-  });
+  const { data: teamHealth } = useSWR<TeamTargetsResponse>(
+    status === "authenticated" && token ? "/api/v1/targets/team" : null,
+    authedFetcher,
+    {
+      refreshInterval: 120000,
+    },
+  );
   const { data: forecast } = useSWR<ForecastResponse>("/api/v1/ai/forecast?scope=year", fetcher, {
     refreshInterval: 180000,
   });

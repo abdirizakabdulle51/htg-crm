@@ -78,7 +78,7 @@ export function TeamLeaderboard({ team, countries }: TeamLeaderboardProps) {
                       </Link>
                     </td>
                     <td className="py-2 text-muted-foreground">
-                      {countryMap.get(member.country_office_id) ?? member.country_office_id.slice(0, 8)}
+                      {member.country ?? countryMap.get(member.country_office_id) ?? member.country_office_id.slice(0, 8)}
                     </td>
                     <td className="py-2 text-right">{formatUSD(member.achieved_usd)}</td>
                     <td className="py-2 text-right">{formatUSD(member.target)}</td>

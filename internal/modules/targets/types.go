@@ -55,6 +55,7 @@ type TeamTarget struct {
 	Email           string    `json:"email"`
 	Name            string    `json:"name"`
 	CountryOfficeID uuid.UUID `json:"country_office_id"`
+	Country         string    `json:"country"`
 	AnnualTargetUSD float64   `json:"annual_target_usd"`
 	AchievedUSD     float64   `json:"achieved_usd"`
 }

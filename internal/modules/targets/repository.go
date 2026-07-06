@@ -140,13 +140,14 @@ func (r *Repository) ListTeamTargets(ctx context.Context, requesterRole string, 
 	}
 
 	rows, err := r.db.Query(ctx, fmt.Sprintf(`
-		SELECT u.id, u.email, u.full_name, u.country_office_id, COALESCE(st.annual_target_usd, 0),
+		SELECT u.id, u.email, u.full_name, u.country_office_id, COALESCE(co.name, ''), COALESCE(st.annual_target_usd, 0),
 			COALESCE(SUM(CASE WHEN l.stage = 'WON' THEN COALESCE(l.potential_value_usd, l.value_usd) ELSE 0 END), 0)
 		FROM users u
+		LEFT JOIN country_offices co ON co.id = u.country_office_id
 		LEFT JOIN sales_targets st ON st.user_id = u.id AND st.year = EXTRACT(YEAR FROM NOW())::int
 		LEFT JOIN leads l ON l.owner_id = u.id AND EXTRACT(YEAR FROM COALESCE(l.won_date, l.updated_at)) = EXTRACT(YEAR FROM NOW())
 		WHERE %s
-		GROUP BY u.id, u.email, u.full_name, u.country_office_id, st.annual_target_usd
+		GROUP BY u.id, u.email, u.full_name, u.country_office_id, co.name, st.annual_target_usd
 		ORDER BY u.full_name`, where), args...)
 	if err != nil {
 		return nil, err
@@ -156,7 +157,7 @@ func (r *Repository) ListTeamTargets(ctx context.Context, requesterRole string, 
 	items := []*TeamTarget{}
 	for rows.Next() {
 		item := &TeamTarget{}
-		if err := rows.Scan(&item.UserID, &item.Email, &item.Name, &item.CountryOfficeID, &item.AnnualTargetUSD, &item.AchievedUSD); err != nil {
+		if err := rows.Scan(&item.UserID, &item.Email, &item.Name, &item.CountryOfficeID, &item.Country, &item.AnnualTargetUSD, &item.AchievedUSD); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
