@@ -177,7 +177,7 @@ type TenantRepository interface {
 	CreateService(ctx context.Context, tenantID uuid.UUID, req CreateServiceRequest) (*Service, error)
 	UpdateService(ctx context.Context, tenantID, serviceID uuid.UUID, req CreateServiceRequest) (*Service, error)
 	ListContacts(ctx context.Context, tenantID uuid.UUID, params PaginationParams) ([]*Contact, int, error)
-	CreateContact(ctx context.Context, tenantID uuid.UUID) (*Contact, error)
+	CreateContact(ctx context.Context, tenantID uuid.UUID, req CreateContactRequest) (*Contact, error)
 	ListContracts(ctx context.Context, tenantID uuid.UUID, params PaginationParams) ([]*Contract, int, error)
 	CreateContract(ctx context.Context, tenantID uuid.UUID, req CreateContractRequest) (*Contract, error)
 	ListActivities(ctx context.Context, tenantID uuid.UUID, params PaginationParams) ([]*Activity, int, error)
