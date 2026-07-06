@@ -1,16 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
+import { PDFDownloadLink } from "@react-pdf/renderer";
 import { useSession } from "next-auth/react";
 import useSWR from "swr";
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 
+import { CEOReportPDF, type CEOReportPDFProps } from "@/components/dashboard/CEOReportPDF";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatUSD } from "@/lib/utils";
-import type { ForecastResponse, PipelineOverview, RecommendationsResponse, TeamTargetsResponse, Tenant } from "@/types/crm";
+import type { AIRecommendation, RecommendationsResponse, Tenant } from "@/types/crm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
+const COUNTRIES = ["Kenya", "Ethiopia", "Somalia", "Djibouti"];
 
 type ApiEnvelope<T> = {
   data: T | null;
@@ -20,16 +22,37 @@ type ApiEnvelope<T> = {
   } | null;
 };
 
-type ReportData = {
-  forecast?: ForecastResponse;
-  pipeline?: PipelineOverview;
-  recommendations?: RecommendationsResponse;
-  team?: TeamTargetsResponse;
-  tenants?: Tenant[];
+type TargetsApiResponse = {
+  targets?: Array<{
+    country?: string | null;
+    account_manager_id?: string | null;
+    target_arr_usd: number;
+  }>;
+};
+
+type LeadsApiResponse = {
+  items?: Lead[];
+  leads?: Lead[];
+};
+
+type Lead = {
+  id: string;
+  country_id?: string;
+  country?: string;
+  stage_number?: number;
+  value_usd?: number;
+  probability?: number;
+  won_date?: string;
+  updated_at?: string;
 };
 
 function tenantARR(tenant: Tenant) {
   return tenant.arr_usd ?? tenant.arrUsd ?? (tenant.monthly_revenue_usd ?? tenant.mrr_usd ?? 0) * 12;
+}
+
+function csvEscape(value: string | number | undefined) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 function downloadBlob(filename: string, type: string, content: BlobPart) {
@@ -44,76 +67,22 @@ function downloadBlob(filename: string, type: string, content: BlobPart) {
   URL.revokeObjectURL(url);
 }
 
-function csvEscape(value: string | number | undefined) {
-  const text = String(value ?? "");
-  return `"${text.replace(/"/g, '""')}"`;
+function isCurrentMonth(dateValue?: string) {
+  if (!dateValue) return false;
+  const date = new Date(dateValue);
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 }
 
-function pdfEscape(text: string) {
-  return text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+function normalizeLeads(response?: LeadsApiResponse | Lead[]) {
+  if (Array.isArray(response)) return response;
+  return response?.items ?? response?.leads ?? [];
 }
 
-function createSimplePdf(lines: string[]) {
-  const pageLines = lines.slice(0, 34);
-  const text = pageLines.map((line, index) => `BT /F1 11 Tf 48 ${760 - index * 20} Td (${pdfEscape(line)}) Tj ET`).join("\n");
-  const objects = [
-    "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
-    "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
-    "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj",
-    "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj",
-    `5 0 obj << /Length ${text.length} >> stream\n${text}\nendstream endobj`,
-  ];
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-  for (const object of objects) {
-    offsets.push(pdf.length);
-    pdf += `${object}\n`;
-  }
-  const xref = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (const offset of offsets.slice(1)) {
-    pdf += `${offset.toString().padStart(10, "0")} 00000 n \n`;
-  }
-  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return pdf;
-}
-
-function buildSummaryLines(data: ReportData) {
-  const tenants = data.tenants ?? [];
-  const totalARR = tenants.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
-  const activeTenants = tenants.filter((tenant) => tenant.status === "ACTIVE").length;
-  const atRiskTenants = tenants.filter((tenant) => (tenant.risk_score ?? 0) >= 60 || tenant.status === "AT_RISK").length;
-  const q3Achieved = (data.team?.team ?? []).reduce((sum, member) => sum + member.achieved_usd, 0);
-  const topRecommendation = data.recommendations?.recommendations?.[0];
-
-  return [
-    "HTG CRM CEO Summary Report",
-    `Generated: ${new Date().toLocaleString()}`,
-    "",
-    `Total ARR: ${formatUSD(totalARR)}`,
-    `Active Tenants: ${activeTenants}`,
-    `At-Risk Tenants: ${atRiskTenants}`,
-    `Q3 Achieved: ${formatUSD(q3Achieved)}`,
-    `Pipeline Value: ${formatUSD(data.pipeline?.total_value_usd ?? 0)}`,
-    `Won This Month: ${formatUSD(data.pipeline?.won_this_month?.value ?? 0)}`,
-    `Forecast: ${formatUSD(data.forecast?.adjusted_forecast_usd ?? 0)}`,
-    `Forecast Confidence: ${data.forecast?.confidence ?? "N/A"}`,
-    "",
-    "Forecast Narrative:",
-    data.forecast?.narrative ?? "No forecast narrative available.",
-    "",
-    "Top Risks:",
-    ...(data.forecast?.top_risks ?? ["No forecast risks available."]).slice(0, 3).map((risk) => `- ${risk}`),
-    "",
-    "Top AI Insight:",
-    topRecommendation ? `${topRecommendation.title}: ${topRecommendation.message}` : "No AI insight available.",
-  ];
-}
-
-function buildRevenueCsv(data: ReportData) {
+function buildRevenueCsv(tenants: Tenant[], leads: Lead[]) {
   const rows = [
     ["Tenant", "Country", "Sector", "Status", "Risk Score", "Monthly Revenue", "ARR"],
-    ...(data.tenants ?? []).map((tenant) => [
+    ...tenants.map((tenant) => [
       tenant.name,
       tenant.country ?? "Unassigned",
       tenant.sector ?? tenant.sector_name ?? "Unassigned",
@@ -123,11 +92,26 @@ function buildRevenueCsv(data: ReportData) {
       tenantARR(tenant),
     ]),
     [],
-    ["Pipeline Total", "", "", "", "", "", data.pipeline?.total_value_usd ?? 0],
-    ["Won This Month", "", "", "", "", "", data.pipeline?.won_this_month?.value ?? 0],
+    ["Lead", "Country ID", "Stage", "Probability", "", "", "Value"],
+    ...leads.map((lead) => [
+      lead.id,
+      lead.country ?? lead.country_id ?? "",
+      lead.stage_number ?? 0,
+      lead.probability ?? 0,
+      "",
+      "",
+      lead.value_usd ?? 0,
+    ]),
   ];
 
   return rows.map((row) => row.map(csvEscape).join(",")).join("\r\n");
+}
+
+function insightFromRecommendation(recommendation: AIRecommendation): { title: string; body: string } {
+  return {
+    title: recommendation.title,
+    body: recommendation.message || `${recommendation.recommended_service ?? "Service"} opportunity for ${recommendation.tenant_name ?? "a tenant"}.`,
+  };
 }
 
 export default function ReportsPage() {
@@ -151,26 +135,90 @@ export default function ReportsPage() {
   };
 
   const canFetch = status === "authenticated" && Boolean(token);
-  const { data: pipeline } = useSWR<PipelineOverview>(canFetch ? "/api/v1/pipeline" : null, authedFetcher);
-  const { data: tenants } = useSWR<Tenant[]>(canFetch ? "/api/v1/tenants?limit=100" : null, authedFetcher);
-  const { data: team } = useSWR<TeamTargetsResponse>(canFetch ? "/api/v1/targets/team" : null, authedFetcher);
-  const { data: forecast } = useSWR<ForecastResponse>(canFetch ? "/api/v1/ai/forecast?scope=year" : null, authedFetcher);
+  const { data: tenants, isLoading: tenantsLoading } = useSWR<Tenant[]>(
+    canFetch ? "/api/v1/tenants?limit=100" : null,
+    authedFetcher,
+  );
+  const { data: targets, isLoading: targetsLoading } = useSWR<TargetsApiResponse>(
+    canFetch ? "/api/v1/targets?quarter=3&year=2026" : null,
+    authedFetcher,
+  );
+  const { data: leadsResponse, isLoading: leadsLoading } = useSWR<LeadsApiResponse | Lead[]>(
+    canFetch ? "/api/v1/leads?limit=100" : null,
+    authedFetcher,
+  );
   const { data: recommendations } = useSWR<RecommendationsResponse>(
     canFetch ? "/api/v1/ai/recommendations?type=CROSS_SELL&limit=10" : null,
     authedFetcher,
   );
 
-  const reportData = useMemo(
-    () => ({ forecast, pipeline, recommendations, team, tenants }),
-    [forecast, pipeline, recommendations, team, tenants],
-  );
+  const tenantsRows = useMemo(() => tenants ?? [], [tenants]);
+  const leads = useMemo(() => normalizeLeads(leadsResponse), [leadsResponse]);
+  const isLoading = status === "loading" || tenantsLoading || targetsLoading || leadsLoading;
 
-  const handlePdfDownload = () => {
-    downloadBlob("ceo-summary-report.pdf", "application/pdf", createSimplePdf(buildSummaryLines(reportData)));
-  };
+  const reportData = useMemo<CEOReportPDFProps>(() => {
+    const targetRows = (targets?.targets ?? []).filter((target) => !target.account_manager_id);
+    const targetByCountry = new Map(
+      targetRows
+        .filter((target) => target.country)
+        .map((target) => [target.country as string, target.target_arr_usd]),
+    );
+    const countryByID = new Map<string, string>();
+    for (const tenant of tenantsRows) {
+      if (tenant.country_id && tenant.country) countryByID.set(tenant.country_id, tenant.country);
+    }
+
+    const wonLeads = leads.filter((lead) => lead.stage_number === 9);
+    const q3Achieved = wonLeads.reduce((sum, lead) => sum + (lead.value_usd ?? 0), 0);
+    const pipeline = leads
+      .filter((lead) => (lead.stage_number ?? 0) >= 1 && (lead.stage_number ?? 0) <= 9)
+      .reduce((sum, lead) => sum + (lead.value_usd ?? 0), 0);
+    const wonThisMonth = wonLeads
+      .filter((lead) => isCurrentMonth(lead.won_date ?? lead.updated_at))
+      .reduce((sum, lead) => sum + (lead.value_usd ?? 0), 0);
+
+    const countries = COUNTRIES.map((country) => {
+      const countryTenants = tenantsRows.filter((tenant) => tenant.country === country);
+      return {
+        name: country,
+        arr: countryTenants.reduce((sum, tenant) => sum + tenantARR(tenant), 0),
+        target: targetByCountry.get(country) ?? 0,
+        tenants: countryTenants.length,
+        atRisk: countryTenants.filter((tenant) => (tenant.risk_score ?? 0) >= 60 || tenant.status === "AT_RISK").length,
+      };
+    }).sort((a, b) => b.arr - a.arr);
+
+    const atRiskTenants = tenantsRows
+      .filter((tenant) => (tenant.risk_score ?? 0) >= 60 || tenant.status === "AT_RISK")
+      .sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))
+      .slice(0, 8)
+      .map((tenant) => ({
+        name: tenant.name,
+        country: tenant.country ?? (tenant.country_id ? countryByID.get(tenant.country_id) : undefined) ?? "Unassigned",
+        sector: tenant.sector ?? tenant.sector_name ?? "Unassigned",
+        riskScore: tenant.risk_score ?? 0,
+        arr: tenantARR(tenant),
+      }));
+
+    const insights = (recommendations?.recommendations ?? []).slice(0, 3).map(insightFromRecommendation);
+
+    return {
+      totalARR: tenantsRows.reduce((sum, tenant) => sum + tenantARR(tenant), 0),
+      q3Target: targetRows.reduce((sum, target) => sum + target.target_arr_usd, 0),
+      q3Achieved,
+      pipeline,
+      wonThisMonth,
+      forecast: q3Achieved + pipeline * 0.2,
+      activeCount: tenantsRows.filter((tenant) => tenant.status === "ACTIVE").length,
+      atRiskCount: atRiskTenants.length,
+      countries,
+      atRiskTenants,
+      insights,
+    };
+  }, [leads, recommendations?.recommendations, targets?.targets, tenantsRows]);
 
   const handleExcelDownload = () => {
-    downloadBlob("revenue-data.csv", "text/csv;charset=utf-8", buildRevenueCsv(reportData));
+    downloadBlob("revenue-data.csv", "text/csv;charset=utf-8", buildRevenueCsv(tenantsRows, leads));
   };
 
   return (
@@ -188,12 +236,27 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Downloads a PDF summary with ARR, tenant health, pipeline, forecast, and top AI insight data.
+              Downloads a branded PDF with HTG executive KPIs, country performance, risk exposure, and AI insights.
             </p>
-            <Button className="gap-2" disabled={!canFetch} onClick={handlePdfDownload}>
-              <Download className="h-4 w-4" />
-              Download PDF
-            </Button>
+            {isLoading ? (
+              <Button className="gap-2" disabled>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Preparing PDF...
+              </Button>
+            ) : (
+              <PDFDownloadLink
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                document={<CEOReportPDF {...reportData} />}
+                fileName="HTG_CEO_Summary_Report.pdf"
+              >
+                {({ loading }) => (
+                  <>
+                    <Download className="h-4 w-4" />
+                    {loading ? "Preparing PDF..." : "Download PDF"}
+                  </>
+                )}
+              </PDFDownloadLink>
+            )}
           </CardContent>
         </Card>
 
@@ -204,9 +267,9 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Downloads tenant revenue, ARR, risk, and pipeline totals as a spreadsheet-ready CSV file.
+              Downloads tenant revenue, ARR, risk, and lead values as a spreadsheet-ready CSV file.
             </p>
-            <Button className="gap-2" disabled={!canFetch} onClick={handleExcelDownload}>
+            <Button className="gap-2" disabled={isLoading || !canFetch} onClick={handleExcelDownload}>
               <Download className="h-4 w-4" />
               Download Excel
             </Button>
