@@ -414,7 +414,7 @@ func tenantWhere(ctx context.Context, filters TenantFilters) (string, []any) {
 		args = append(args, userID)
 		where = append(where, fmt.Sprintf("account_manager_id = $%d", len(args)))
 	}
-	if countryID, ok := middleware.FilterCountryID(ctx); ok {
+	if countryID, ok := middleware.FilterCountryID(ctx); ok && filters.CountryID == uuid.Nil {
 		args = append(args, countryID)
 		where = append(where, fmt.Sprintf("country_id = $%d", len(args)))
 	}

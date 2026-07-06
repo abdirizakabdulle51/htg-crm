@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/htgclouds/crm-api/internal/auth"
 	"github.com/htgclouds/crm-api/internal/middleware"
 	"github.com/htgclouds/crm-api/internal/response"
 )
@@ -25,6 +26,12 @@ func (h *Handler) List(c *gin.Context) {
 	params := middleware.GetPagination(c)
 	filters, ok := tenantFilters(c)
 	if !ok {
+		return
+	}
+	if shouldReturn, empty := applyGMCountryFilter(c, &filters); !shouldReturn {
+		if empty {
+			response.SuccessList(c, []*Tenant{}, 0, params.Page, params.Limit)
+		}
 		return
 	}
 	items, total, err := h.service.List(c.Request.Context(), filters, params)
@@ -289,6 +296,41 @@ func tenantFilters(c *gin.Context) (TenantFilters, bool) {
 		filters.MinRiskScore = &value
 	}
 	return filters, true
+}
+
+func applyGMCountryFilter(c *gin.Context, filters *TenantFilters) (shouldReturn bool, empty bool) {
+	user, ok := c.Get(auth.UserContextKey)
+	if !ok {
+		return true, false
+	}
+	userCtx, ok := user.(auth.UserContext)
+	if !ok || userCtx.Role != middleware.RoleCountryGM {
+		return true, false
+	}
+
+	countryName := c.Query("country")
+	if countryName == "" {
+		return false, true
+	}
+
+	var countryUUIDs = map[string]string{
+		"Somalia":  "029d3da0-19a7-4bd1-8dbb-a915bef8055e",
+		"Kenya":    "30f5c442-ada7-4f06-9e42-69dcf2eb195b",
+		"Ethiopia": "d064f0d3-2833-485a-a864-44e6beb76f34",
+		"Djibouti": "25d20433-056d-413b-9a3c-362a730f3c0a",
+	}
+
+	countryID, ok := countryUUIDs[countryName]
+	if !ok {
+		return false, true
+	}
+
+	parsed, err := uuid.Parse(countryID)
+	if err != nil {
+		return false, true
+	}
+	filters.CountryID = parsed
+	return true, false
 }
 
 func optionalUUID(c *gin.Context, key string) (uuid.UUID, bool) {
