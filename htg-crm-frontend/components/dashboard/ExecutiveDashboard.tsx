@@ -35,7 +35,7 @@ type TargetsApiResponse = {
 };
 
 export function ExecutiveDashboard() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [showTargets, setShowTargets] = useState(false);
   const [q3Target, setQ3Target] = useState(0);
   const [countryTargets, setCountryTargets] = useState<Record<string, number>>({});
@@ -64,9 +64,14 @@ export function ExecutiveDashboard() {
   });
 
   useEffect(() => {
-    if (!session) return;
+    if (status === "loading") return;
 
     const token = (session as any)?.accessToken ?? "";
+    if (!token) {
+      console.error("targets fetch skipped: missing access token");
+      return;
+    }
+
     const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
     fetch(`${API}/api/v1/targets?quarter=3&year=2026`, { headers, credentials: "include" })
@@ -90,7 +95,7 @@ export function ExecutiveDashboard() {
         setCountryTargets(byCountry);
       })
       .catch((e) => console.error("targets fetch error", e));
-  }, [session]);
+  }, [session, status]);
 
   return (
     <div className="grid grid-cols-12 gap-4">
