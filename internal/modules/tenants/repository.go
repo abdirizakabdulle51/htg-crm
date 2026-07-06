@@ -33,7 +33,10 @@ func (r *Repository) List(ctx context.Context, filters TenantFilters, params Pag
 	}
 	args = append(args, params.Limit, (params.Page-1)*params.Limit)
 	query := fmt.Sprintf(`
-		SELECT id, country_id, region_id, sector_id, account_manager_id, lead_id, name, status::text,
+		SELECT id, country_id, region_id, sector_id, account_manager_id, lead_id, name,
+			(SELECT name FROM country_offices WHERE country_offices.id = tenants.country_id),
+			(SELECT name FROM sectors WHERE sectors.id = tenants.sector_id),
+			status::text,
 			arr_usd, mrr_usd, health_score, risk_score, renewal_date, onboarded_at, created_at, updated_at
 		FROM tenants WHERE %s
 		ORDER BY %s %s
@@ -58,7 +61,10 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*Tenant, error
 	where, args := tenantWhere(ctx, TenantFilters{})
 	args = append(args, id)
 	row := r.db.QueryRow(ctx, fmt.Sprintf(`
-		SELECT id, country_id, region_id, sector_id, account_manager_id, lead_id, name, status::text,
+		SELECT id, country_id, region_id, sector_id, account_manager_id, lead_id, name,
+			(SELECT name FROM country_offices WHERE country_offices.id = tenants.country_id),
+			(SELECT name FROM sectors WHERE sectors.id = tenants.sector_id),
+			status::text,
 			arr_usd, mrr_usd, health_score, risk_score, renewal_date, onboarded_at, created_at, updated_at
 		FROM tenants WHERE %s AND id = $%d`, where, len(args)), args...)
 	return scanTenant(row)
@@ -88,7 +94,10 @@ func (r *Repository) Create(ctx context.Context, req CreateTenantRequest) (*Tena
 	row := r.db.QueryRow(ctx, `
 		INSERT INTO tenants (country_id, region_id, sector_id, account_manager_id, lead_id, name, status, arr_usd, mrr_usd, renewal_date, onboarded_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7::tenant_status, $8, $9, $10, NOW())
-		RETURNING id, country_id, region_id, sector_id, account_manager_id, lead_id, name, status::text,
+		RETURNING id, country_id, region_id, sector_id, account_manager_id, lead_id, name,
+			(SELECT name FROM country_offices WHERE country_offices.id = tenants.country_id),
+			(SELECT name FROM sectors WHERE sectors.id = tenants.sector_id),
+			status::text,
 			arr_usd, mrr_usd, health_score, risk_score, renewal_date, onboarded_at, created_at, updated_at`,
 		req.CountryID, req.RegionID, req.SectorID, req.AccountManagerID, req.LeadID, req.Name, status, req.ARRUSD, req.MRRUSD, req.RenewalDate)
 	return scanTenant(row)
@@ -144,7 +153,10 @@ func (r *Repository) Update(ctx context.Context, id uuid.UUID, req UpdateTenantR
 	}
 	query := fmt.Sprintf(`
 		UPDATE tenants SET %s WHERE %s
-		RETURNING id, country_id, region_id, sector_id, account_manager_id, lead_id, name, status::text,
+		RETURNING id, country_id, region_id, sector_id, account_manager_id, lead_id, name,
+			(SELECT name FROM country_offices WHERE country_offices.id = tenants.country_id),
+			(SELECT name FROM sectors WHERE sectors.id = tenants.sector_id),
+			status::text,
 			arr_usd, mrr_usd, health_score, risk_score, renewal_date, onboarded_at, created_at, updated_at`,
 		strings.Join(sets, ", "), strings.Join(where, " AND "))
 	return scanTenant(r.db.QueryRow(ctx, query, args...))
@@ -434,7 +446,7 @@ type scanner interface{ Scan(dest ...any) error }
 func scanTenant(row scanner) (*Tenant, error) {
 	item := &Tenant{}
 	var riskScore float64
-	err := row.Scan(&item.ID, &item.CountryID, &item.RegionID, &item.SectorID, &item.AccountManagerID, &item.LeadID, &item.Name, &item.Status, &item.ARRUSD, &item.MRRUSD, &item.HealthScore, &riskScore, &item.RenewalDate, &item.OnboardedAt, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.CountryID, &item.RegionID, &item.SectorID, &item.AccountManagerID, &item.LeadID, &item.Name, &item.Country, &item.Sector, &item.Status, &item.ARRUSD, &item.MRRUSD, &item.HealthScore, &riskScore, &item.RenewalDate, &item.OnboardedAt, &item.CreatedAt, &item.UpdatedAt)
 	item.RiskScore = int(riskScore)
 	return item, err
 }
