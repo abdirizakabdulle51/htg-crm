@@ -78,14 +78,14 @@ function leadStage(lead: LeadRow): (typeof STAGES)[number] {
 }
 
 export function GMDashboard() {
-  const { data: session, status } = useSession();
-  const token = typeof session?.accessToken === "string" ? session.accessToken : "";
-  const canFetch = status === "authenticated" && Boolean(token);
+  const { data: session } = useSession();
+  const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
+  const canFetch = Boolean(session);
 
   const authedFetcher = async <T,>(url: string): Promise<T> => {
     const response = await fetch(`${API}${url}`, {
       credentials: "include",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     const body = await response.json();
 
@@ -118,9 +118,14 @@ export function GMDashboard() {
   );
 
   const tenants = useMemo(() => unwrapList<Tenant>(tenantsData), [tenantsData]);
+  if (tenants[0]) {
+    console.log("GM dashboard first tenant", tenants[0]);
+  }
+  const countryFromApi =
+    tenants.find((tenant) => tenant.country?.toLowerCase() === COUNTRY.toLowerCase())?.country ?? COUNTRY;
   const kenyaTenants = useMemo(
-    () => tenants.filter((tenant) => tenant.country?.toLowerCase() === COUNTRY.toLowerCase()),
-    [tenants],
+    () => tenants.filter((tenant) => tenant.country === countryFromApi),
+    [countryFromApi, tenants],
   );
   const leads = useMemo(() => unwrapList<LeadRow>(leadsData), [leadsData]);
 
@@ -131,7 +136,7 @@ export function GMDashboard() {
       ?.target_arr_usd ?? 0;
   const achievement = q3Target > 0 ? (countryARR / q3Target) * 100 : 0;
   const revenueGap = Math.max(q3Target - countryARR, 0);
-  const activeTenants = kenyaTenants.filter((tenant) => tenant.status === "ACTIVE").length;
+  const activeTenants = kenyaTenants.length;
   const atRiskTenants = kenyaTenants.filter((tenant) => (tenant.risk_score ?? 0) > 50).length;
 
   const topCustomers = useMemo(
@@ -148,6 +153,17 @@ export function GMDashboard() {
       })),
     [leads],
   );
+
+  if (!session) {
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-normal">Country Manager Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Loading session...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
