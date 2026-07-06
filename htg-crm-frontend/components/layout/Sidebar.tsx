@@ -11,7 +11,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
 
-  const roles = (session as any)?.roles as string[] | undefined;
+  const sessionWithRoles = session as (typeof session & { roles?: string[] }) | null;
+  const roles = sessionWithRoles?.roles;
   const role  = roles?.[0] ?? "";
   const items = roleNavItems[role] ?? [];
 
