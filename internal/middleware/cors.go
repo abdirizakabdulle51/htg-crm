@@ -11,8 +11,12 @@ import (
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(allowedOrigins))
 	for _, origin := range allowedOrigins {
+		if origin == "*" {
+			origin = "http://localhost:3000"
+		}
 		allowed[origin] = struct{}{}
 	}
+	allowed["http://localhost:3000"] = struct{}{}
 
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
