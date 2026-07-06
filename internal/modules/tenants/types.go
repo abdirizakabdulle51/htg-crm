@@ -20,6 +20,8 @@ type Tenant struct {
 	LeadID           *uuid.UUID `json:"lead_id,omitempty"`
 	CreatedBy        *uuid.UUID `json:"created_by,omitempty"`
 	Name             string     `json:"name"`
+	Country          string     `json:"country,omitempty"`
+	Sector           string     `json:"sector,omitempty"`
 	Status           string     `json:"status"`
 	ARRUSD           float64    `json:"arr_usd"`
 	MRRUSD           float64    `json:"mrr_usd"`
@@ -175,7 +177,7 @@ type TenantRepository interface {
 	CreateService(ctx context.Context, tenantID uuid.UUID, req CreateServiceRequest) (*Service, error)
 	UpdateService(ctx context.Context, tenantID, serviceID uuid.UUID, req CreateServiceRequest) (*Service, error)
 	ListContacts(ctx context.Context, tenantID uuid.UUID, params PaginationParams) ([]*Contact, int, error)
-	CreateContact(ctx context.Context, tenantID uuid.UUID, req CreateContactRequest) (*Contact, error)
+	CreateContact(ctx context.Context, tenantID uuid.UUID) (*Contact, error)
 	ListContracts(ctx context.Context, tenantID uuid.UUID, params PaginationParams) ([]*Contract, int, error)
 	CreateContract(ctx context.Context, tenantID uuid.UUID, req CreateContractRequest) (*Contract, error)
 	ListActivities(ctx context.Context, tenantID uuid.UUID, params PaginationParams) ([]*Activity, int, error)
