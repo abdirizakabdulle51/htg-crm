@@ -39,10 +39,11 @@ function percent(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
-function countryRevenue(tenants?: Tenant[] | null) {
+function countryRevenue(tenants?: Tenant[] | null, pipeline?: PipelineOverview | null) {
+  const countryNameByID = new Map((pipeline?.by_country ?? []).map((country) => [country.country_id, country.country]));
   const totals = new Map<string, number>();
   for (const tenant of tenants ?? []) {
-    const country = tenant.country ?? "Unassigned";
+    const country = tenant.country ?? (tenant.country_id ? countryNameByID.get(tenant.country_id) : undefined) ?? "Unassigned";
     totals.set(country, (totals.get(country) ?? 0) + tenantARR(tenant));
   }
   return Array.from(totals.entries())
@@ -98,7 +99,7 @@ export function ExecutiveOverview() {
   const q3Achieved = pipeline?.won_this_month?.value ?? 0;
   const q3Attainment = q3Target > 0 ? (q3Achieved / q3Target) * 100 : 0;
   const totalARR = (tenants ?? []).reduce((sum, tenant) => sum + tenantARR(tenant), 0);
-  const countries = countryRevenue(tenants);
+  const countries = countryRevenue(tenants, pipeline);
   const topCountry = countries[0];
   const worstCountry = countries[countries.length - 1];
   const averageCountryARR = countries.length ? totalARR / countries.length : 0;
