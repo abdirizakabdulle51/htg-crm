@@ -136,7 +136,7 @@ export function ExecutiveOverview() {
       <div className="grid gap-4 xl:grid-cols-3">
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle>Top Performing Country</CardTitle>
+            <CardTitle>Highest ARR Country</CardTitle>
             <Globe2 className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
@@ -147,7 +147,7 @@ export function ExecutiveOverview() {
 
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle>Worst Performing Country</CardTitle>
+            <CardTitle>Lowest ARR Country</CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-600" />
           </CardHeader>
           <CardContent>
