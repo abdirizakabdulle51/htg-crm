@@ -184,19 +184,21 @@ export function CEOReportPDF({
           ))}
         </View>
 
-        <SectionTitle title="AI Insights" />
-        <View style={styles.insightGrid}>
-          {insightRows.map((insight, index) => (
-            <View key={insight.title} style={styles.insightCard}>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{index + 1}</Text>
+        <View style={styles.insightsSection} wrap={false}>
+          <SectionTitle title="AI Insights" />
+          <View style={styles.insightGrid}>
+            {insightRows.map((insight, index) => (
+              <View key={insight.title} style={styles.insightCard} wrap={false}>
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{index + 1}</Text>
+                </View>
+                <View style={styles.insightText}>
+                  <Text style={styles.insightTitle}>{insight.title}</Text>
+                  <Text style={styles.insightBody}>{insight.body}</Text>
+                </View>
               </View>
-              <View style={styles.insightText}>
-                <Text style={styles.insightTitle}>{insight.title}</Text>
-                <Text style={styles.insightBody}>{insight.body}</Text>
-              </View>
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
 
         <View style={styles.footer}>
@@ -347,12 +349,16 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     marginRight: 6,
+    minHeight: 72,
     padding: 8,
   },
   insightGrid: {
     display: "flex",
     flexDirection: "row",
     marginBottom: 22,
+  },
+  insightsSection: {
+    marginBottom: 10,
   },
   insightText: {
     flex: 1,
