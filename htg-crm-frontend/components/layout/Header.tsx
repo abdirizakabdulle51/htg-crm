@@ -16,6 +16,10 @@ import {
 export function Header() {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const country =
+    (session as { country?: string } | null)?.country ??
+    (session as { user?: { country?: string } } | null)?.user?.country ??
+    "Kenya";
   const headerCopy = {
     "/ceo": {
       title: "Executive Intelligence Center",
@@ -40,6 +44,10 @@ export function Header() {
     "/reports": {
       title: "Executive Reports",
       description: "Board-ready reports, executive summaries, revenue exports, and strategic business reporting.",
+    },
+    "/gm": {
+      title: `${country} Country Workspace`,
+      description: "Country execution dashboard — pipeline, customers, targets, and daily actions.",
     },
   }[pathname] ?? {
     title: "Commercial workspace",
