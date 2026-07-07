@@ -196,12 +196,11 @@ function matchesAM(value: string, amName: string, amId: string) {
   return normalizedValue === amName.toLowerCase() || Boolean(amId && normalizedValue === amId.toLowerCase());
 }
 
-function scopedTenants(tenants: TenantWithExtras[], amName: string, amId: string) {
+function assignedTenants(tenants: TenantWithExtras[], amName: string, amId: string) {
   const hasOwnerData = tenants.some((tenant) => tenantOwnerValue(tenant));
-  if (!hasOwnerData) return tenants.slice(0, 6);
+  if (!hasOwnerData) return [];
 
-  const mine = tenants.filter((tenant) => matchesAM(tenantOwnerValue(tenant), amName, amId));
-  return mine.length ? mine : tenants.slice(0, 6);
+  return tenants.filter((tenant) => matchesAM(tenantOwnerValue(tenant), amName, amId));
 }
 
 function scopedOpportunities(leads: LeadRow[], amName: string, amId: string) {
@@ -354,21 +353,25 @@ export default function AMPage() {
     };
   }, [session, status]);
 
-  const tenants = useMemo(() => scopedTenants(tenantsData, amName, amId), [amId, amName, tenantsData]);
+  const assignedCustomers = useMemo(() => assignedTenants(tenantsData, amName, amId), [amId, amName, tenantsData]);
+  const myCustomers = useMemo(
+    () => (assignedCustomers.length > 0 ? assignedCustomers : tenantsData.filter((tenant) => tenant.country === "Kenya").slice(0, 5)),
+    [assignedCustomers, tenantsData],
+  );
   const rawOpportunities = useMemo(() => scopedOpportunities(leadsData, amName, amId), [amId, amName, leadsData]);
   const opportunities = useMemo(() => rawOpportunities.map(normalizeOpportunity), [rawOpportunities]);
 
-  const myARR = tenants.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
+  const myARR = myCustomers.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
   const achievement = MY_TARGET > 0 ? (myARR / MY_TARGET) * 100 : 0;
   const openOpportunities = opportunities.filter((opportunity) => !["Won", "Lost"].includes(opportunity.stage));
   const myPipeline = openOpportunities.reduce((sum, opportunity) => sum + opportunity.value, 0);
-  const atRiskCustomers = tenants.filter((tenant) => (tenant.risk_score ?? 0) > 50);
-  const renewalRows = tenants
+  const atRiskCustomers = myCustomers.filter((tenant) => (tenant.risk_score ?? 0) > 50);
+  const renewalRows = myCustomers
     .map((tenant) => ({ tenant, days: daysUntil(tenantRenewalDate(tenant)) }))
     .filter((row): row is { tenant: TenantWithExtras; days: number } => row.days !== null && row.days >= 0)
     .sort((a, b) => a.days - b.days);
   const renewalsDue = renewalRows.filter((row) => row.days <= 90);
-  const attentionCustomers = tenants
+  const attentionCustomers = myCustomers
     .map((tenant) => ({ tenant, days: daysUntil(tenantRenewalDate(tenant)), health: tenantHealthScore(tenant) }))
     .filter((row) => (row.tenant.risk_score ?? 0) > 50 || (row.days !== null && row.days <= 90 && row.days >= 0) || row.health < 70)
     .sort((a, b) => (b.tenant.risk_score ?? 0) - (a.tenant.risk_score ?? 0));
