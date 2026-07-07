@@ -77,6 +77,10 @@ export function Header() {
       title: "Country Reports",
       description: "Generate operational reports, revenue summaries, pipeline analytics, and customer exports.",
     },
+    "/hob": {
+      title: "Commercial Command Center",
+      description: "Company-wide commercial performance, pipeline, and intervention intelligence.",
+    },
   }[pathname] ?? {
     title: "Commercial workspace",
     description: "Q3 execution dashboard",

@@ -1,10 +1,5 @@
-"use client";
+import HOBDashboard from "@/components/dashboard/HOBDashboard";
 
 export default function HOBPage() {
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h1 className="text-2xl font-semibold tracking-normal">Dashboard</h1>
-      <p className="mt-2 text-sm text-muted-foreground">This HoB section is coming soon.</p>
-    </div>
-  );
+  return <HOBDashboard />;
 }
