@@ -592,7 +592,7 @@ export default function AMPerformancePage() {
           <CoachMetric label="Best Metric" value={bestMetric} />
           <CoachMetric label="Weakest Metric" value={weakestMetric} />
           <CoachMetric label="Largest Opportunity" value={largestOpportunity?.name ?? "No open opportunity"} />
-          <CoachMetric label="Target Gap" value={formatUSD(targetGap)} />
+          <CoachMetric label={myARR > MY_TARGET ? "Target Exceeded" : "Target Gap"} value={myARR > MY_TARGET ? `+${formatUSD(targetSurplus)}` : formatUSD(targetGap)} />
         </div>
         <div className="mt-5 rounded-lg border border-teal-100 bg-white p-4 text-sm text-gray-700">
           {largestOpportunity
