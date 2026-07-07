@@ -446,6 +446,7 @@ export default function AMPerformancePage() {
   const myARR = myCustomers.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
   const achievement = MY_TARGET > 0 ? (myARR / MY_TARGET) * 100 : 0;
   const targetGap = Math.max(0, MY_TARGET - myARR);
+  const targetSurplus = Math.max(0, myARR - MY_TARGET);
   const openOpportunities = opportunities.filter((opportunity) => !["Won", "Lost"].includes(opportunity.stage));
   const pipeline = openOpportunities.reduce((sum, opportunity) => sum + opportunity.value, 0);
   const weightedForecast = openOpportunities.reduce((sum, opportunity) => sum + opportunity.value * (opportunity.probability / 100), 0);
@@ -495,7 +496,7 @@ export default function AMPerformancePage() {
         <div className="grid gap-4 md:grid-cols-4">
           <CoachMetric label="Current ARR" value={formatUSD(myARR)} />
           <CoachMetric label="Target" value={formatUSD(MY_TARGET)} />
-          <CoachMetric label="Gap Remaining" value={formatUSD(targetGap)} />
+          <CoachMetric label={myARR > MY_TARGET ? "Target Exceeded" : "Gap Remaining"} value={myARR > MY_TARGET ? `+${formatUSD(targetSurplus)}` : formatUSD(targetGap)} />
           <CoachMetric label="Achievement" value={`${achievement.toFixed(1)}%`} />
         </div>
         <div className="mt-6">
@@ -503,7 +504,9 @@ export default function AMPerformancePage() {
             <div className="h-full rounded-full bg-[#0A9599]" style={{ width: `${Math.min(100, achievement)}%` }} />
           </div>
           <p className="mt-2 text-sm text-gray-500">
-            {achievement.toFixed(1)}% achieved against a personal target of {formatUSD(MY_TARGET)}.
+            {myARR > MY_TARGET
+              ? `${achievement.toFixed(1)}% achieved — exceeding target by ${formatUSD(targetSurplus)}.`
+              : `${achievement.toFixed(1)}% achieved against a personal target of ${formatUSD(MY_TARGET)}.`}
           </p>
         </div>
       </Section>
