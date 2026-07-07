@@ -218,6 +218,19 @@ function statusClass(status: string) {
   return "bg-yellow-100 text-yellow-700";
 }
 
+function trendFor(row: SectorRow) {
+  const ratio = row.arr > 0 ? row.pipeline / row.arr : row.pipeline > 0 ? Number.POSITIVE_INFINITY : 0;
+  if (ratio >= 0.5) return "↑ Growing";
+  if (ratio >= 0.2) return "→ Stable";
+  return "↓ Declining";
+}
+
+function trendClass(trend: string) {
+  if (trend.includes("Growing")) return "text-green-700";
+  if (trend.includes("Stable")) return "text-yellow-700";
+  return "text-red-700";
+}
+
 function stageClass(stage: string) {
   if (stage === "Won") return "text-green-700";
   if (stage === "Lost") return "text-gray-500";
@@ -378,7 +391,7 @@ export default function HOBSectorsPage() {
       </div>
 
       <Section title="Sector Performance Table" subtitle="ARR, customer health, pipeline, and weighted forecast by sector.">
-        <Table minWidth="1080px">
+        <Table minWidth="1160px">
           <thead>
             <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-500">
               <th className="py-3 pr-4 font-medium">Sector</th>
@@ -389,12 +402,14 @@ export default function HOBSectorsPage() {
               <th className="py-3 pr-4 text-right font-medium">Weighted Forecast</th>
               <th className="py-3 pr-4 text-right font-medium">At-Risk Revenue</th>
               <th className="py-3 pr-4 text-right font-medium">Health Score</th>
-              <th className="py-3 text-right font-medium">Status</th>
+              <th className="py-3 pr-4 text-right font-medium">Status</th>
+              <th className="py-3 text-right font-medium">Trend</th>
             </tr>
           </thead>
           <tbody>
             {sectorRows.map((sector) => {
               const statusLabel = statusFor(sector);
+              const trend = trendFor(sector);
               return (
                 <tr className="border-b last:border-0" key={sector.sector}>
                   <td className="py-3 pr-4 font-medium text-gray-900">{sector.sector}</td>
@@ -405,11 +420,12 @@ export default function HOBSectorsPage() {
                   <td className="py-3 pr-4 text-right">{formatUSD(sector.weighted)}</td>
                   <td className="py-3 pr-4 text-right">{formatUSD(sector.atRiskRevenue)}</td>
                   <td className="py-3 pr-4 text-right">{sector.healthScore.toFixed(0)}</td>
-                  <td className="py-3 text-right">
+                  <td className="py-3 pr-4 text-right">
                     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusClass(statusLabel)}`}>
                       {statusLabel}
                     </span>
                   </td>
+                  <td className={`py-3 text-right font-semibold ${trendClass(trend)}`}>{trend}</td>
                 </tr>
               );
             })}
