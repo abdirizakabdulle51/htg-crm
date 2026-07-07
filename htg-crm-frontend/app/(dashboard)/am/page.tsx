@@ -128,6 +128,69 @@ type TenantWithExtras = Tenant & {
   healthScore?: number | null;
 };
 
+const mockTenants: TenantWithExtras[] = [
+  {
+    id: "kenya-tenant-01",
+    name: "Kenya Tenant 01",
+    country: "Kenya",
+    sector: "Telecom",
+    arr_usd: 720000,
+    mrr_usd: 60000,
+    health_score: 91,
+    risk_score: 8,
+    status: "ACTIVE",
+    renewal_date: "2027-06-30",
+  },
+  {
+    id: "kenya-tenant-02",
+    name: "Kenya Tenant 02",
+    country: "Kenya",
+    sector: "Finance",
+    arr_usd: 540000,
+    mrr_usd: 45000,
+    health_score: 89,
+    risk_score: 10,
+    status: "ACTIVE",
+    renewal_date: "2027-03-31",
+  },
+  {
+    id: "kenya-tenant-03",
+    name: "Kenya Tenant 03",
+    country: "Kenya",
+    sector: "Government",
+    arr_usd: 180000,
+    mrr_usd: 15000,
+    health_score: 78,
+    risk_score: 22,
+    status: "ACTIVE",
+    renewal_date: "2026-12-15",
+  },
+  {
+    id: "kenya-tenant-04",
+    name: "Kenya Tenant 04",
+    country: "Kenya",
+    sector: "Healthcare",
+    arr_usd: 150000,
+    mrr_usd: 12500,
+    health_score: 58,
+    risk_score: 58,
+    status: "AT_RISK",
+    renewal_date: "2026-09-30",
+  },
+  {
+    id: "kenya-tenant-05",
+    name: "Kenya Tenant 05",
+    country: "Kenya",
+    sector: "Logistics",
+    arr_usd: 300000,
+    mrr_usd: 25000,
+    health_score: 83,
+    risk_score: 15,
+    status: "ACTIVE",
+    renewal_date: "2027-01-31",
+  },
+];
+
 function unwrapList<T>(value: T[] | { items?: T[]; tenants?: T[]; leads?: T[] } | null | undefined): T[] {
   if (Array.isArray(value)) return value;
   return value?.items ?? value?.tenants ?? value?.leads ?? [];
@@ -333,10 +396,11 @@ export default function AMPage() {
         if (cancelled) return;
 
         if (tenantsResponse.status === "fulfilled") {
-          setTenantsData(unwrapList<TenantWithExtras>(tenantsResponse.value));
+          const tenants = unwrapList<TenantWithExtras>(tenantsResponse.value);
+          setTenantsData(tenants.length ? tenants : mockTenants);
         } else {
           console.error("AM tenants fetch failed", tenantsResponse.reason);
-          setTenantsData([]);
+          setTenantsData(mockTenants);
         }
 
         if (leadsResponse.status === "fulfilled") {
