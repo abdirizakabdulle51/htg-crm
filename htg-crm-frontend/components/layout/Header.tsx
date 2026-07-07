@@ -119,35 +119,35 @@ export function Header() {
     },
     "/am/customers": {
       title: "My Customers",
-      description: "This AM section is coming soon.",
+      description: "Manage assigned customers, health, renewals, risks, and relationship priorities.",
     },
     "/am/opportunities": {
       title: "My Opportunities",
-      description: "This AM section is coming soon.",
+      description: "Manage personal pipeline, opportunity stages, forecast, and next sales actions.",
     },
     "/am/tasks": {
       title: "My Tasks",
-      description: "This AM section is coming soon.",
+      description: "Manage daily sales activities, follow-ups, renewals, and customer commitments.",
     },
     "/am/activities": {
       title: "My Activities",
-      description: "This AM section is coming soon.",
+      description: "Track customer interactions, meeting outcomes, follow-ups, and relationship history.",
     },
     "/am/renewals": {
       title: "Renewals",
-      description: "This AM section is coming soon.",
+      description: "Manage upcoming renewals, customer retention plans, and recurring revenue.",
     },
     "/am/calendar": {
       title: "Calendar",
-      description: "This AM section is coming soon.",
+      description: "Manage customer meetings, renewals, follow-ups, and daily schedule.",
     },
     "/am/performance": {
       title: "My Performance",
-      description: "This AM section is coming soon.",
+      description: "Track personal sales performance, targets, pipeline, and achievement.",
     },
     "/am/reports": {
       title: "Reports",
-      description: "This AM section is coming soon.",
+      description: "Generate personal sales reports, customer exports, opportunity summaries, and activity reports.",
     },
   }[pathname] ?? {
     title: "Commercial workspace",
