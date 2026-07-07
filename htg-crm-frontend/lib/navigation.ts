@@ -10,6 +10,18 @@ export type NavItem = {
   icon: React.ElementType;
 };
 
+const hobNavItems: NavItem[] = [
+  { href: "/hob",           label: "Dashboard",          icon: LayoutDashboard },
+  { href: "/hob/countries", label: "Countries",          icon: Globe },
+  { href: "/hob/pipeline",  label: "Pipeline",           icon: TrendingUp },
+  { href: "/hob/sectors",   label: "Sectors",            icon: BarChart3 },
+  { href: "/hob/teams",     label: "Teams",              icon: Users },
+  { href: "/hob/accounts",  label: "Strategic Accounts", icon: Building2 },
+  { href: "/hob/approvals", label: "Approvals",          icon: CheckSquare },
+  { href: "/hob/risks",     label: "Risks",              icon: AlertTriangle },
+  { href: "/hob/reports",   label: "Reports",            icon: FileText },
+];
+
 export const roleNavItems: Record<string, NavItem[]> = {
   ACCOUNT_MANAGER: [
     { href: "/account-manager",               label: "Dashboard",      icon: LayoutDashboard },
@@ -29,14 +41,11 @@ export const roleNavItems: Record<string, NavItem[]> = {
     { href: "/gm/risks",     label: "Risks",            icon: AlertTriangle },
     { href: "/gm/reports",   label: "Reports",          icon: FileText },
   ],
-  HEAD_OF_BUSINESS: [
-    { href: "/head-of-business",           label: "Dashboard",           icon: LayoutDashboard },
-    { href: "/head-of-business/overview",  label: "Regional Overview",   icon: Globe },
-    { href: "/head-of-business/countries", label: "Country Performance", icon: BarChart3 },
-    { href: "/revenue",                    label: "Revenue",             icon: DollarSign },
-    { href: "/strategic-risks",            label: "Strategic Risks",     icon: AlertTriangle },
-    { href: "/reports",                    label: "Reports",             icon: FileText },
-  ],
+  HOB: hobNavItems,
+  HEAD_OF_BUSINESS: hobNavItems,
+  head_of_business: hobNavItems,
+  HoB: hobNavItems,
+  "Head of Business": hobNavItems,
   CEO: [
     { href: "/ceo",           label: "Dashboard",           icon: LayoutDashboard },
     { href: "/executive-overview",  label: "Executive Overview",  icon: Globe },

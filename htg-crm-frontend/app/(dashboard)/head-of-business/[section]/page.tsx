@@ -1,11 +1,20 @@
-"use client";
-import { useParams } from "next/navigation";
-export default function Section() {
-  const { section } = useParams();
-  return (
-    <div className="flex flex-col items-center justify-center h-96 text-muted-foreground">
-      <p className="text-lg font-medium capitalize">{String(section).replace(/-/g, " ")}</p>
-      <p className="text-sm mt-1">This section is coming soon.</p>
-    </div>
-  );
+import { redirect } from "next/navigation";
+
+const sectionRedirects: Record<string, string> = {
+  accounts: "/hob/accounts",
+  approvals: "/hob/approvals",
+  countries: "/hob/countries",
+  pipeline: "/hob/pipeline",
+  reports: "/hob/reports",
+  risks: "/hob/risks",
+  sectors: "/hob/sectors",
+  teams: "/hob/teams",
+};
+
+export default function HeadOfBusinessSectionPage({
+  params,
+}: {
+  params: { section: string };
+}) {
+  redirect(sectionRedirects[params.section] ?? "/hob");
 }

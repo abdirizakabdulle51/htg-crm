@@ -1,5 +1,5 @@
-import { ExecutiveDashboard } from "@/components/dashboard/ExecutiveDashboard";
+import { redirect } from "next/navigation";
 
 export default function HeadOfBusinessPage() {
-  return <ExecutiveDashboard />;
+  redirect("/hob");
 }
