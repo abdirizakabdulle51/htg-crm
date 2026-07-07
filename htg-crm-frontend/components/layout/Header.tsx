@@ -47,7 +47,35 @@ export function Header() {
     },
     "/gm": {
       title: `${country} Country Workspace`,
-      description: "Country execution dashboard — pipeline, customers, targets, and daily actions.",
+      description: "Country execution dashboard for revenue, pipeline, customers, renewals, and daily operational priorities.",
+    },
+    "/gm/team": {
+      title: "Team Performance",
+      description: "Monitor Account Manager performance, target achievement, customer assignments, and pipeline execution.",
+    },
+    "/gm/pipeline": {
+      title: "Country Pipeline",
+      description: "Manage sales opportunities, pipeline progression, and expected revenue across your country.",
+    },
+    "/gm/tenants": {
+      title: "Country Customers",
+      description: "Monitor customer health, cloud consumption, renewals, and revenue across your country.",
+    },
+    "/gm/renewals": {
+      title: "Renewal Center",
+      description: "Track upcoming contract renewals, renewal risk, and customer retention activities.",
+    },
+    "/gm/approvals": {
+      title: "Approval Center",
+      description: "Review and approve proposals, pricing requests, and commercial exceptions.",
+    },
+    "/gm/risks": {
+      title: "Risk Center",
+      description: "Monitor customer health, churn exposure, operational risks, and executive escalations.",
+    },
+    "/gm/reports": {
+      title: "Country Reports",
+      description: "Generate operational reports, revenue summaries, pipeline analytics, and customer exports.",
     },
   }[pathname] ?? {
     title: "Commercial workspace",
