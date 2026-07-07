@@ -79,7 +79,39 @@ export function Header() {
     },
     "/hob": {
       title: "Commercial Command Center",
-      description: "Company-wide commercial performance, pipeline, and intervention intelligence.",
+      description: "Company-wide commercial performance, pipeline, country execution, and intervention intelligence.",
+    },
+    "/hob/countries": {
+      title: "Country Portfolio",
+      description: "Compare country performance, targets, health, and commercial intervention priorities.",
+    },
+    "/hob/pipeline": {
+      title: "Commercial Pipeline",
+      description: "Cross-country pipeline visibility, stage health, and commercial intervention priorities.",
+    },
+    "/hob/sectors": {
+      title: "Sector Performance",
+      description: "Commercial performance across industries, growth, and market opportunities.",
+    },
+    "/hob/teams": {
+      title: "Commercial Teams",
+      description: "Monitor Country GM execution, coaching priorities, and regional performance.",
+    },
+    "/hob/accounts": {
+      title: "Strategic Accounts",
+      description: "Company-wide strategic customers requiring executive commercial attention.",
+    },
+    "/hob/approvals": {
+      title: "Commercial Approvals",
+      description: "Review high-value proposals, discounts, and commercial exceptions.",
+    },
+    "/hob/risks": {
+      title: "Commercial Risk Center",
+      description: "Monitor commercial exposure, customer health, and country-level risks.",
+    },
+    "/hob/reports": {
+      title: "Commercial Reports",
+      description: "Commercial reporting, exports, and management summaries.",
     },
   }[pathname] ?? {
     title: "Commercial workspace",
