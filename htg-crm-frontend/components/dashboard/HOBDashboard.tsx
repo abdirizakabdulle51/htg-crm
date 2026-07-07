@@ -44,12 +44,17 @@ type TenantRow = {
 
 type TargetRow = {
   country?: string | null;
+  account_manager_id?: string | null;
   target_arr?: number | null;
   target_arr_usd?: number | null;
   targetArrUsd?: number | null;
   achieved_arr?: number | null;
   achieved_arr_usd?: number | null;
   achievedArrUsd?: number | null;
+};
+
+type TeamTargetRow = {
+  achieved_usd?: number | null;
 };
 
 type AlertRow = {
@@ -88,10 +93,6 @@ function targetARR(target: TargetRow) {
   return target.target_arr_usd ?? target.target_arr ?? target.targetArrUsd ?? 0;
 }
 
-function achievedARR(target: TargetRow) {
-  return target.achieved_arr_usd ?? target.achieved_arr ?? target.achievedArrUsd ?? 0;
-}
-
 function achievementClass(value: number) {
   if (value >= 80) return "text-green-700";
   if (value >= 60) return "text-yellow-700";
@@ -115,6 +116,7 @@ export default function HOBDashboard() {
   const { data: session, status } = useSession();
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [targets, setTargets] = useState<TargetRow[]>([]);
+  const [teamTargets, setTeamTargets] = useState<TeamTargetRow[]>([]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -136,15 +138,25 @@ export default function HOBDashboard() {
       credentials: "include",
     })
       .then((response) => response.json())
-      .then((json) => setTargets(unwrapList<TargetRow>(json.data, ["targets", "items"])))
+      .then((json) => setTargets(unwrapList<TargetRow>(json.data ?? json, ["targets", "items"])))
       .catch(() => setTargets([]));
+
+    fetch(`${API}/api/v1/targets/team`, {
+      headers,
+      credentials: "include",
+    })
+      .then((response) => response.json())
+      .then((json) => setTeamTargets(unwrapList<TeamTargetRow>(json.data ?? json, ["team", "items"])))
+      .catch(() => setTeamTargets([]));
   }, [status, session]);
+
+  const countryTargets = useMemo(() => targets.filter((target) => !target.account_manager_id), [targets]);
 
   const countryRows = useMemo(() => {
     return COUNTRIES.map((country) => {
       const countryTenants = tenants.filter((tenant) => tenant.country === country);
       const countryARR = countryTenants.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
-      const countryTarget = targets
+      const countryTarget = countryTargets
         .filter((target) => target.country === country)
         .reduce((sum, target) => sum + targetARR(target), 0);
       const atRiskTenants = countryTenants.filter((tenant) => (tenant.risk_score ?? 0) > 50).length;
@@ -159,7 +171,7 @@ export default function HOBDashboard() {
         pipeline: country === "Kenya" ? 840000 : country === "Ethiopia" ? 560000 : country === "Somalia" ? 420000 : 260000,
       };
     });
-  }, [targets, tenants]);
+  }, [countryTargets, tenants]);
 
   const sectorRows = useMemo(() => {
     const totals = tenants.reduce((map, tenant) => {
@@ -175,8 +187,8 @@ export default function HOBDashboard() {
   }, [tenants]);
 
   const companyARR = tenants.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
-  const q3Target = targets.reduce((sum, target) => sum + targetARR(target), 0);
-  const q3Achieved = targets.reduce((sum, target) => sum + achievedARR(target), 0);
+  const q3Target = countryTargets.reduce((sum, target) => sum + targetARR(target), 0);
+  const q3Achieved = teamTargets.reduce((sum, target) => sum + (target.achieved_usd ?? 0), 0);
   const q3Forecast = q3Achieved + PIPELINE_VALUE * 0.25;
   const revenueGap = Math.max(q3Target - q3Achieved, 0);
   const atRiskRevenue = tenants
