@@ -30,14 +30,6 @@ const SECTOR_BY_ID: Record<string, string> = {
   "d3ef1714-976e-4048-b0fc-958d84995c9f": "Telecom",
 };
 
-const OWNER_BY_ID: Record<string, string> = {
-  "7dd609d7-4e72-447f-8ef7-a976ea1a15cb": "Account Manager",
-  "934ad677-cc14-412a-a40b-694ef7ef0203": "Country GM",
-  "79d698fa-bbce-4b9e-9133-3929f967aa00": "Head of Business",
-  "ea8564e9-b9ff-4cc7-bf53-0ba71d90ff6d": "Chief Executive",
-  "61edc228-cb07-4129-bbef-15b1a1f84ec5": "System Admin",
-};
-
 const mockOpportunities = [
   { name: "Banking Expansion", country: "Kenya", sector: "Finance", stage: "Proposal", value: 450000, owner: "GM Kenya", probability: 65, closeDate: "2026-08-15" },
   { name: "Government Cloud", country: "Ethiopia", sector: "Government", stage: "Qualified", value: 300000, owner: "GM Ethiopia", probability: 45, closeDate: "2026-09-01" },
@@ -80,12 +72,16 @@ type RawOpportunity = {
   probability?: number | null;
   win_probability?: number | null;
   probability_percent?: number | null;
-  owner?: string | null;
+  owner?: {
+    name?: string | null;
+  } | string | null;
   owner_id?: string | null;
   owner_name?: string | null;
   ownerName?: string | null;
+  assigned_user_name?: string | null;
   assigned_to?: string | null;
   assignedTo?: string | null;
+  assigned_to_name?: string | null;
   account_manager?: string | null;
   accountManager?: string | null;
   account_manager_name?: string | null;
@@ -96,6 +92,12 @@ type RawOpportunity = {
   tenant?: {
     country?: string | null;
     sector?: string | null;
+  } | null;
+  owner_user?: {
+    name?: string | null;
+  } | null;
+  user?: {
+    name?: string | null;
   } | null;
 };
 
@@ -157,6 +159,7 @@ function normalizeOpportunity(raw: RawOpportunity): Opportunity {
     raw.potential_value_usd ??
     0;
   const probability = raw.probability ?? raw.win_probability ?? raw.probability_percent ?? 0;
+  const ownerValue = typeof raw.owner === "string" ? raw.owner : raw.owner?.name;
   return {
     name: raw.name ?? raw.opportunity_name ?? raw.title ?? raw.company_name ?? raw.companyName ?? "Unnamed",
     country:
@@ -178,16 +181,19 @@ function normalizeOpportunity(raw: RawOpportunity): Opportunity {
     stage: normalizeStage(raw.stage ?? raw.status ?? raw.pipeline_stage ?? raw.pipelineStage ?? "Unknown"),
     value,
     owner:
-      raw.owner ??
+      ownerValue ??
       raw.owner_name ??
       raw.ownerName ??
+      raw.assigned_user_name ??
       raw.assigned_to ??
       raw.assignedTo ??
+      raw.assigned_to_name ??
       raw.account_manager ??
       raw.accountManager ??
       raw.account_manager_name ??
-      (raw.owner_id ? OWNER_BY_ID[raw.owner_id] : undefined) ??
-      "Unassigned",
+      raw.owner_user?.name ??
+      raw.user?.name ??
+      (raw.owner_id ? "Account Manager" : "Unassigned"),
     probability,
     closeDate: raw.closeDate ?? raw.close_date ?? raw.expected_close_date ?? raw.expectedCloseDate ?? "",
   };
