@@ -121,6 +121,9 @@ type TenantWithExtras = Tenant & {
   owner_id?: string | null;
   owner_name?: string | null;
   account_manager?: string | null;
+  country_name?: string | null;
+  countryName?: string | null;
+  tenant_country?: string | null;
   health_score?: number | null;
   healthScore?: number | null;
 };
@@ -159,6 +162,10 @@ function tenantRenewalDate(tenant: TenantWithExtras) {
 
 function tenantSector(tenant: TenantWithExtras) {
   return tenant.sector ?? tenant.sector_name ?? "Unassigned";
+}
+
+function tenantCountry(tenant: TenantWithExtras) {
+  return tenant.country ?? tenant.country_name ?? tenant.countryName ?? tenant.tenant_country ?? "";
 }
 
 function tenantHealthScore(tenant: TenantWithExtras) {
@@ -354,10 +361,15 @@ export default function AMPage() {
   }, [session, status]);
 
   const assignedCustomers = useMemo(() => assignedTenants(tenantsData, amName, amId), [amId, amName, tenantsData]);
-  const myCustomers = useMemo(
-    () => (assignedCustomers.length > 0 ? assignedCustomers : tenantsData.filter((tenant) => tenant.country === "Kenya").slice(0, 5)),
-    [assignedCustomers, tenantsData],
-  );
+  const myCustomers = useMemo(() => {
+    if (assignedCustomers.length > 0) return assignedCustomers;
+
+    const kenyaCustomers = tenantsData
+      .filter((tenant) => tenantCountry(tenant).toLowerCase() === "kenya")
+      .slice(0, 5);
+
+    return kenyaCustomers.length > 0 ? kenyaCustomers : tenantsData.slice(0, 5);
+  }, [assignedCustomers, tenantsData]);
   const rawOpportunities = useMemo(() => scopedOpportunities(leadsData, amName, amId), [amId, amName, leadsData]);
   const opportunities = useMemo(() => rawOpportunities.map(normalizeOpportunity), [rawOpportunities]);
 
@@ -507,7 +519,7 @@ export default function AMPage() {
                 {attentionCustomers.map(({ tenant, days, health }) => (
                   <tr className="border-b last:border-0" key={tenant.id}>
                     <td className="py-3 pr-4 font-medium">{tenant.name}</td>
-                    <td className="py-3 pr-4 text-gray-500">{tenant.country ?? "Unassigned"}</td>
+                    <td className="py-3 pr-4 text-gray-500">{tenantCountry(tenant) || "Unassigned"}</td>
                     <td className="py-3 pr-4 text-gray-500">{tenantSector(tenant)}</td>
                     <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
                     <td className="py-3 pr-4 text-right">{health.toFixed(0)}</td>
