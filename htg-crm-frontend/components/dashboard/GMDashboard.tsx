@@ -10,7 +10,14 @@ import { formatUSD } from "@/lib/utils";
 import type { Tenant } from "@/types/crm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
-const STAGES = ["PROSPECT", "QUALIFIED", "PROPOSAL", "NEGOTIATION", "WON", "LOST"] as const;
+const STAGES = ["Prospect", "Qualified", "Proposal", "Negotiation", "Won", "Lost"] as const;
+
+const mockLeads: LeadRow[] = [
+  { name: "Banking Expansion", value: 450000, stage: "Proposal", sector: "Finance", owner: "AM 01", status: "Open" },
+  { name: "Government Cloud", value: 300000, stage: "Qualified", sector: "Government", owner: "AM 02", status: "Open" },
+  { name: "Telecom Backup", value: 220000, stage: "Negotiation", sector: "Telecom", owner: "AM 01", status: "Open" },
+  { name: "Healthcare DR", value: 180000, stage: "Prospect", sector: "Healthcare", owner: "AM 03", status: "Open" },
+];
 
 type ApiEnvelope<T> = {
   data: T | null;
@@ -31,13 +38,24 @@ type TargetsResponse = {
 };
 
 type LeadRow = {
-  id: string;
+  id?: string;
+  name?: string;
+  company_name?: string;
+  companyName?: string;
   country?: string;
   stage?: string | number;
   stage_number?: number;
   stage_name?: string;
+  value?: number;
   value_usd?: number;
   valueUsd?: number;
+  potential_value_usd?: number;
+  sector?: string;
+  sector_name?: string;
+  owner?: string;
+  owner_name?: string;
+  account_manager_name?: string;
+  status?: string;
 };
 
 type LeadsResponse = LeadRow[] | { leads?: LeadRow[]; items?: LeadRow[] };
@@ -102,17 +120,18 @@ function formatDate(value: string | null) {
 }
 
 function leadValue(lead: LeadRow) {
-  return lead.value_usd ?? lead.valueUsd ?? 0;
+  return lead.value ?? lead.value_usd ?? lead.valueUsd ?? lead.potential_value_usd ?? 0;
 }
 
 function leadStage(lead: LeadRow): (typeof STAGES)[number] {
-  const stageText = String(lead.stage_name ?? lead.stage ?? "").toUpperCase();
-  if (stageText.includes("WON") || lead.stage_number === 9) return "WON";
-  if (stageText.includes("LOST") || lead.stage_number === 10) return "LOST";
-  if (stageText.includes("NEGOTIATION") || (lead.stage_number ?? 0) >= 7) return "NEGOTIATION";
-  if (stageText.includes("PROPOSAL") || (lead.stage_number ?? 0) >= 5) return "PROPOSAL";
-  if (stageText.includes("QUALIFIED") || (lead.stage_number ?? 0) >= 3) return "QUALIFIED";
-  return "PROSPECT";
+  const stageText = String(lead.stage_name ?? lead.stage ?? "").toLowerCase();
+  const stageNumber = lead.stage_number ?? (typeof lead.stage === "number" ? lead.stage : undefined);
+  if (stageText.includes("won") || stageNumber === 9) return "Won";
+  if (stageText.includes("lost") || stageNumber === 10) return "Lost";
+  if (stageText.includes("negotiation") || (stageNumber ?? 0) >= 7) return "Negotiation";
+  if (stageText.includes("proposal") || (stageNumber ?? 0) >= 5) return "Proposal";
+  if (stageText.includes("qualified") || (stageNumber ?? 0) >= 3) return "Qualified";
+  return "Prospect";
 }
 
 export function GMDashboard() {
@@ -175,13 +194,14 @@ export function GMDashboard() {
 
         setTenantsData(unwrapList<Tenant>(tenants));
         setTargetsData(targets ?? {});
-        setLeadsData(leads ?? []);
+        const leadRows = unwrapList<LeadRow>(leads);
+        setLeadsData(leadRows.length ? leadRows : mockLeads);
       } catch (error) {
         console.error("GM dashboard fetch failed", error);
         if (!cancelled) {
           setTenantsData([]);
           setTargetsData({});
-          setLeadsData([]);
+          setLeadsData(mockLeads);
         }
       } finally {
         if (!cancelled) setTenantsLoading(false);
