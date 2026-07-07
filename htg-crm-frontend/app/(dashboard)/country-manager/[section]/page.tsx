@@ -1,11 +1,20 @@
-"use client";
-import { useParams } from "next/navigation";
-export default function Section() {
-  const { section } = useParams();
-  return (
-    <div className="flex flex-col items-center justify-center h-96 text-muted-foreground">
-      <p className="text-lg font-medium capitalize">{String(section).replace(/-/g, " ")}</p>
-      <p className="text-sm mt-1">This section is coming soon.</p>
-    </div>
-  );
+import { redirect } from "next/navigation";
+
+const sectionRedirects: Record<string, string> = {
+  approvals: "/gm/approvals",
+  alerts: "/gm/risks",
+  pipeline: "/gm/pipeline",
+  renewals: "/gm/renewals",
+  reports: "/gm/reports",
+  risks: "/gm/risks",
+  team: "/gm/team",
+  tenants: "/gm/tenants",
+};
+
+export default function CountryManagerSectionPage({
+  params,
+}: {
+  params: { section: string };
+}) {
+  redirect(sectionRedirects[params.section] ?? "/gm");
 }

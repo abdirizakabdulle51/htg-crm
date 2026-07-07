@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 
 const routeRoles: Record<string, string[]> = {
   "/account-manager": ["ACCOUNT_MANAGER"],
-  "/country-manager": ["COUNTRY_GM"],
+  "/country-manager": ["COUNTRY_GM", "Country GM", "country_gm", "GM"],
+  "/gm": ["COUNTRY_GM", "Country GM", "country_gm", "GM"],
   "/head-of-business": ["HEAD_OF_BUSINESS"],
   "/ceo":             ["CEO", "ADMIN"],
   "/executive-overview": ["CEO", "ADMIN"],
@@ -11,7 +12,10 @@ const routeRoles: Record<string, string[]> = {
 
 const roleHomeRoute: Record<string, string> = {
   ACCOUNT_MANAGER:  "/account-manager",
-  COUNTRY_GM:  "/country-manager",
+  COUNTRY_GM:  "/gm",
+  "Country GM": "/gm",
+  country_gm: "/gm",
+  GM: "/gm",
   HEAD_OF_BUSINESS: "/head-of-business",
   CEO:              "/ceo",
   ADMIN:            "/ceo",
@@ -47,6 +51,7 @@ export const config = {
   matcher: [
     "/account-manager/:path*",
     "/country-manager/:path*",
+    "/gm/:path*",
     "/head-of-business/:path*",
     "/ceo/:path*",
     "/executive-overview/:path*",
