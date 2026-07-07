@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { Bell, LogOut, UserCircle } from "lucide-react";
 
@@ -14,12 +15,42 @@ import {
 
 export function Header() {
   const { data: session } = useSession();
+  const pathname = usePathname();
+  const headerCopy = {
+    "/ceo": {
+      title: "Executive Intelligence Center",
+      description: "Real-time company performance, revenue, forecast, strategic opportunities, and executive insights.",
+    },
+    "/executive-overview": {
+      title: "Executive Overview",
+      description: "High-level performance snapshot across the HTG Clouds business.",
+    },
+    "/country-performance": {
+      title: "Country Performance",
+      description: "Compare revenue, pipeline, target achievement, and growth across all countries.",
+    },
+    "/revenue": {
+      title: "Revenue Analytics",
+      description: "Revenue composition, sector performance, customer concentration, and growth trends.",
+    },
+    "/strategic-risks": {
+      title: "Strategic Risk Center",
+      description: "Monitor customer health, churn exposure, renewal risk, and executive escalations.",
+    },
+    "/reports": {
+      title: "Executive Reports",
+      description: "Board-ready reports, executive summaries, revenue exports, and strategic business reporting.",
+    },
+  }[pathname] ?? {
+    title: "Commercial workspace",
+    description: "Q3 execution dashboard",
+  };
 
   return (
     <header className="flex h-16 items-center justify-between border-b bg-background px-5">
       <div>
-        <p className="text-sm font-medium">Commercial workspace</p>
-        <p className="text-xs text-muted-foreground">Q3 execution dashboard</p>
+        <p className="text-sm font-medium">{headerCopy.title}</p>
+        <p className="text-xs text-muted-foreground">{headerCopy.description}</p>
       </div>
       <div className="flex items-center gap-2">
         <Button aria-label="Notifications" size="icon" variant="ghost">
