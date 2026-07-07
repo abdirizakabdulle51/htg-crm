@@ -8,6 +8,36 @@ import { formatUSD } from "@/lib/utils";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 const STAGES = ["Prospect", "Qualified", "Proposal", "Negotiation", "Won", "Lost"];
 
+const COUNTRY_BY_ID: Record<string, string> = {
+  "029d3da0-19a7-4bd1-8dbb-a915bef8055e": "Somalia",
+  "30f5c442-ada7-4f06-9e42-69dcf2eb195b": "Kenya",
+  "d064f0d3-2833-485a-a864-44e6beb76f34": "Ethiopia",
+  "25d20433-056d-413b-9a3c-362a730f3c0a": "Djibouti",
+};
+
+const SECTOR_BY_ID: Record<string, string> = {
+  "a76b023f-7343-4d23-8653-51118277fbf7": "Agriculture",
+  "d5f9d2da-06b2-4299-820d-bdf944643bfd": "Education",
+  "df989d27-11eb-4d87-80e3-74b9e8ebfdea": "Energy",
+  "59221f4e-b1bb-4044-b844-659bea171825": "Finance",
+  "a507bfe5-bfc0-496f-9443-e27603fc77a2": "Government",
+  "13933d31-10d7-45db-9ecb-042790fa8a59": "Healthcare",
+  "dcce22ab-7c80-414e-8b30-e7361d87ae3d": "Hospitality",
+  "fcb59619-1066-4857-8280-2dead6856281": "Logistics",
+  "dca6440f-ee55-473a-a91e-9b00794277ac": "Manufacturing",
+  "0fc039f3-1f73-4b60-801a-a9d13638a974": "NGO",
+  "a2947294-74d8-4a53-b605-6d85f63bb720": "Retail",
+  "d3ef1714-976e-4048-b0fc-958d84995c9f": "Telecom",
+};
+
+const OWNER_BY_ID: Record<string, string> = {
+  "7dd609d7-4e72-447f-8ef7-a976ea1a15cb": "Account Manager",
+  "934ad677-cc14-412a-a40b-694ef7ef0203": "Country GM",
+  "79d698fa-bbce-4b9e-9133-3929f967aa00": "Head of Business",
+  "ea8564e9-b9ff-4cc7-bf53-0ba71d90ff6d": "Chief Executive",
+  "61edc228-cb07-4129-bbef-15b1a1f84ec5": "System Admin",
+};
+
 const mockOpportunities = [
   { name: "Banking Expansion", country: "Kenya", sector: "Finance", stage: "Proposal", value: 450000, owner: "GM Kenya", probability: 65, closeDate: "2026-08-15" },
   { name: "Government Cloud", country: "Ethiopia", sector: "Government", stage: "Qualified", value: 300000, owner: "GM Ethiopia", probability: 45, closeDate: "2026-09-01" },
@@ -26,10 +56,12 @@ type RawOpportunity = {
   company_name?: string | null;
   companyName?: string | null;
   country?: string | null;
+  country_id?: string | null;
   country_name?: string | null;
   countryName?: string | null;
   tenant_country?: string | null;
   sector?: string | null;
+  sector_id?: string | null;
   sector_name?: string | null;
   sectorName?: string | null;
   industry?: string | null;
@@ -49,6 +81,7 @@ type RawOpportunity = {
   win_probability?: number | null;
   probability_percent?: number | null;
   owner?: string | null;
+  owner_id?: string | null;
   owner_name?: string | null;
   ownerName?: string | null;
   assigned_to?: string | null;
@@ -132,6 +165,7 @@ function normalizeOpportunity(raw: RawOpportunity): Opportunity {
       raw.countryName ??
       raw.tenant_country ??
       raw.tenant?.country ??
+      (raw.country_id ? COUNTRY_BY_ID[raw.country_id] : undefined) ??
       "Unassigned",
     sector:
       raw.sector ??
@@ -139,6 +173,7 @@ function normalizeOpportunity(raw: RawOpportunity): Opportunity {
       raw.sectorName ??
       raw.industry ??
       raw.tenant?.sector ??
+      (raw.sector_id ? SECTOR_BY_ID[raw.sector_id] : undefined) ??
       "Unassigned",
     stage: normalizeStage(raw.stage ?? raw.status ?? raw.pipeline_stage ?? raw.pipelineStage ?? "Unknown"),
     value,
@@ -151,6 +186,7 @@ function normalizeOpportunity(raw: RawOpportunity): Opportunity {
       raw.account_manager ??
       raw.accountManager ??
       raw.account_manager_name ??
+      (raw.owner_id ? OWNER_BY_ID[raw.owner_id] : undefined) ??
       "Unassigned",
     probability,
     closeDate: raw.closeDate ?? raw.close_date ?? raw.expected_close_date ?? raw.expectedCloseDate ?? "",
