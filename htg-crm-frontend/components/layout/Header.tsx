@@ -113,6 +113,42 @@ export function Header() {
       title: "Commercial Reports",
       description: "Commercial reporting, exports, and management summaries.",
     },
+    "/am": {
+      title: "Sales Workspace",
+      description: "Today's priorities, customer relationships, opportunities, and revenue progress.",
+    },
+    "/am/customers": {
+      title: "My Customers",
+      description: "This AM section is coming soon.",
+    },
+    "/am/opportunities": {
+      title: "My Opportunities",
+      description: "This AM section is coming soon.",
+    },
+    "/am/tasks": {
+      title: "My Tasks",
+      description: "This AM section is coming soon.",
+    },
+    "/am/activities": {
+      title: "My Activities",
+      description: "This AM section is coming soon.",
+    },
+    "/am/renewals": {
+      title: "Renewals",
+      description: "This AM section is coming soon.",
+    },
+    "/am/calendar": {
+      title: "Calendar",
+      description: "This AM section is coming soon.",
+    },
+    "/am/performance": {
+      title: "My Performance",
+      description: "This AM section is coming soon.",
+    },
+    "/am/reports": {
+      title: "Reports",
+      description: "This AM section is coming soon.",
+    },
   }[pathname] ?? {
     title: "Commercial workspace",
     description: "Q3 execution dashboard",

@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Building2, TrendingUp, CheckSquare,
-  Bell, Target, Globe, BarChart3, AlertTriangle,
-  FileText, DollarSign, Users,
+  Target, Globe, BarChart3, AlertTriangle,
+  FileText, DollarSign, Users, Activity, Calendar,
 } from "lucide-react";
 
 export type NavItem = {
@@ -22,15 +22,23 @@ const hobNavItems: NavItem[] = [
   { href: "/hob/reports",   label: "Reports",            icon: FileText },
 ];
 
+const amNavItems: NavItem[] = [
+  { href: "/am",               label: "Dashboard",        icon: LayoutDashboard },
+  { href: "/am/customers",     label: "My Customers",     icon: Building2 },
+  { href: "/am/opportunities", label: "My Opportunities", icon: TrendingUp },
+  { href: "/am/tasks",         label: "My Tasks",         icon: CheckSquare },
+  { href: "/am/activities",    label: "My Activities",    icon: Activity },
+  { href: "/am/renewals",      label: "Renewals",         icon: Target },
+  { href: "/am/calendar",      label: "Calendar",         icon: Calendar },
+  { href: "/am/performance",   label: "My Performance",   icon: BarChart3 },
+  { href: "/am/reports",       label: "Reports",          icon: FileText },
+];
+
 export const roleNavItems: Record<string, NavItem[]> = {
-  ACCOUNT_MANAGER: [
-    { href: "/account-manager",               label: "Dashboard",      icon: LayoutDashboard },
-    { href: "/account-manager/tenants",       label: "My Tenants",     icon: Building2 },
-    { href: "/account-manager/pipeline",      label: "Pipeline",       icon: TrendingUp },
-    { href: "/account-manager/tasks",         label: "Tasks",          icon: CheckSquare },
-    { href: "/account-manager/alerts",        label: "Alerts",         icon: Bell },
-    { href: "/account-manager/opportunities", label: "Opportunities",  icon: Target },
-  ],
+  AM: amNavItems,
+  ACCOUNT_MANAGER: amNavItems,
+  "Account Manager": amNavItems,
+  account_manager: amNavItems,
   COUNTRY_GM: [
     { href: "/gm",           label: "Dashboard",        icon: LayoutDashboard },
     { href: "/gm/team",      label: "Team Performance", icon: Users },

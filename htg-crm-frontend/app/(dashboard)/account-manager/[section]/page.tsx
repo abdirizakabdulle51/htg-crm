@@ -1,11 +1,21 @@
-"use client";
-import { useParams } from "next/navigation";
-export default function Section() {
-  const { section } = useParams();
-  return (
-    <div className="flex flex-col items-center justify-center h-96 text-muted-foreground">
-      <p className="text-lg font-medium capitalize">{String(section).replace(/-/g, " ")}</p>
-      <p className="text-sm mt-1">This section is coming soon.</p>
-    </div>
-  );
+import { redirect } from "next/navigation";
+
+const sectionRedirects: Record<string, string> = {
+  tenants: "/am/customers",
+  pipeline: "/am/opportunities",
+  opportunities: "/am/opportunities",
+  tasks: "/am/tasks",
+  activities: "/am/activities",
+  renewals: "/am/renewals",
+  calendar: "/am/calendar",
+  performance: "/am/performance",
+  reports: "/am/reports",
+};
+
+export default function AccountManagerSectionRedirectPage({
+  params,
+}: {
+  params: { section: string };
+}) {
+  redirect(sectionRedirects[params.section] ?? "/am");
 }
