@@ -39,16 +39,6 @@ export function Sidebar() {
             </Link>
           );
         })}
-        <Link
-          href="/gm"
-          className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
-            pathname === "/gm" && "bg-accent text-accent-foreground font-medium",
-          )}
-        >
-          <LayoutDashboard className="h-4 w-4 shrink-0" />
-          GM Dashboard
-        </Link>
         {items.length === 0 && (
           <p className="px-3 py-2 text-xs text-muted-foreground">
             Loading navigation…
