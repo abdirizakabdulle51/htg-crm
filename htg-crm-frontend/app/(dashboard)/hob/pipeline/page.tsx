@@ -21,22 +21,49 @@ const mockOpportunities = [
 
 type RawOpportunity = {
   name?: string | null;
+  opportunity_name?: string | null;
+  title?: string | null;
   company_name?: string | null;
   companyName?: string | null;
   country?: string | null;
+  country_name?: string | null;
+  countryName?: string | null;
+  tenant_country?: string | null;
   sector?: string | null;
   sector_name?: string | null;
+  sectorName?: string | null;
+  industry?: string | null;
   stage?: string | number | null;
+  status?: string | null;
+  pipeline_stage?: string | number | null;
+  pipelineStage?: string | number | null;
   value?: number | null;
+  potential_value?: number | null;
   value_usd?: number | null;
+  valueUsd?: number | null;
   potential_value_usd?: number | null;
+  estimated_value?: number | null;
+  deal_value?: number | null;
+  amount?: number | null;
   probability?: number | null;
+  win_probability?: number | null;
   probability_percent?: number | null;
   owner?: string | null;
   owner_name?: string | null;
+  ownerName?: string | null;
+  assigned_to?: string | null;
+  assignedTo?: string | null;
   account_manager?: string | null;
+  accountManager?: string | null;
+  account_manager_name?: string | null;
+  close_date?: string | null;
   expected_close_date?: string | null;
+  expectedCloseDate?: string | null;
   closeDate?: string | null;
+  tenant?: {
+    country?: string | null;
+    sector?: string | null;
+  } | null;
 };
 
 type Opportunity = {
@@ -86,17 +113,47 @@ function normalizeStage(stage: RawOpportunity["stage"]) {
 }
 
 function normalizeOpportunity(raw: RawOpportunity): Opportunity {
-  const value = raw.value ?? raw.value_usd ?? raw.potential_value_usd ?? 0;
-  const probability = raw.probability ?? raw.probability_percent ?? 0;
+  const value =
+    raw.value ??
+    raw.potential_value ??
+    raw.estimated_value ??
+    raw.deal_value ??
+    raw.amount ??
+    raw.value_usd ??
+    raw.valueUsd ??
+    raw.potential_value_usd ??
+    0;
+  const probability = raw.probability ?? raw.win_probability ?? raw.probability_percent ?? 0;
   return {
-    name: raw.name ?? raw.company_name ?? raw.companyName ?? "Untitled opportunity",
-    country: raw.country ?? "Unassigned",
-    sector: raw.sector ?? raw.sector_name ?? "Unassigned",
-    stage: normalizeStage(raw.stage),
+    name: raw.name ?? raw.opportunity_name ?? raw.title ?? raw.company_name ?? raw.companyName ?? "Unnamed",
+    country:
+      raw.country ??
+      raw.country_name ??
+      raw.countryName ??
+      raw.tenant_country ??
+      raw.tenant?.country ??
+      "Unassigned",
+    sector:
+      raw.sector ??
+      raw.sector_name ??
+      raw.sectorName ??
+      raw.industry ??
+      raw.tenant?.sector ??
+      "Unassigned",
+    stage: normalizeStage(raw.stage ?? raw.status ?? raw.pipeline_stage ?? raw.pipelineStage ?? "Unknown"),
     value,
-    owner: raw.owner ?? raw.owner_name ?? raw.account_manager ?? "Unassigned",
+    owner:
+      raw.owner ??
+      raw.owner_name ??
+      raw.ownerName ??
+      raw.assigned_to ??
+      raw.assignedTo ??
+      raw.account_manager ??
+      raw.accountManager ??
+      raw.account_manager_name ??
+      "Unassigned",
     probability,
-    closeDate: raw.closeDate ?? raw.expected_close_date ?? "Not scheduled",
+    closeDate: raw.closeDate ?? raw.close_date ?? raw.expected_close_date ?? raw.expectedCloseDate ?? "",
   };
 }
 
