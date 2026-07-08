@@ -2,6 +2,7 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
 const routeRoles: Record<string, string[]> = {
+  "/admin": ["ADMIN", "Admin", "admin", "SYSTEM_ADMIN", "System Admin", "system_admin"],
   "/account-manager": ["AM", "ACCOUNT_MANAGER", "Account Manager", "account_manager"],
   "/am": ["AM", "ACCOUNT_MANAGER", "Account Manager", "account_manager"],
   "/country-manager": ["COUNTRY_GM", "Country GM", "country_gm", "GM"],
@@ -13,6 +14,12 @@ const routeRoles: Record<string, string[]> = {
 };
 
 const roleHomeRoute: Record<string, string> = {
+  ADMIN: "/admin",
+  Admin: "/admin",
+  admin: "/admin",
+  SYSTEM_ADMIN: "/admin",
+  "System Admin": "/admin",
+  system_admin: "/admin",
   AM: "/am",
   ACCOUNT_MANAGER: "/am",
   "Account Manager": "/am",
@@ -27,7 +34,6 @@ const roleHomeRoute: Record<string, string> = {
   HoB: "/hob",
   "Head of Business": "/hob",
   CEO:              "/ceo",
-  ADMIN:            "/ceo",
 };
 
 export default withAuth(
@@ -58,6 +64,7 @@ export default withAuth(
 
 export const config = {
   matcher: [
+    "/admin/:path*",
     "/account-manager/:path*",
     "/am/:path*",
     "/country-manager/:path*",

@@ -21,6 +21,54 @@ export function Header() {
     (session as { user?: { country?: string } } | null)?.user?.country ??
     "Kenya";
   const headerCopy = {
+    "/admin": {
+      title: "System Administration",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/users": {
+      title: "Users",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/roles": {
+      title: "Roles & Permissions",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/countries": {
+      title: "Countries",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/assignments": {
+      title: "Assignments",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/targets": {
+      title: "Targets",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/data": {
+      title: "Data Management",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/approvals": {
+      title: "Approvals Config",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/integrations": {
+      title: "Integrations",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/audit": {
+      title: "Audit Logs",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/settings": {
+      title: "Settings",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
+    "/admin/reports": {
+      title: "Reports",
+      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+    },
     "/ceo": {
       title: "Executive Intelligence Center",
       description: "Real-time company performance, revenue, forecast, strategic opportunities, and executive insights.",

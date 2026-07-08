@@ -2,6 +2,7 @@ import {
   LayoutDashboard, Building2, TrendingUp, CheckSquare,
   Target, Globe, BarChart3, AlertTriangle,
   FileText, DollarSign, Users, Activity, Calendar,
+  ShieldCheck, Database, Plug, ClipboardList, Settings,
 } from "lucide-react";
 
 export type NavItem = {
@@ -34,7 +35,28 @@ const amNavItems: NavItem[] = [
   { href: "/am/reports",       label: "Reports",          icon: FileText },
 ];
 
+const adminNavItems: NavItem[] = [
+  { href: "/admin",              label: "Dashboard",           icon: LayoutDashboard },
+  { href: "/admin/users",        label: "Users",               icon: Users },
+  { href: "/admin/roles",        label: "Roles & Permissions", icon: ShieldCheck },
+  { href: "/admin/countries",    label: "Countries",           icon: Globe },
+  { href: "/admin/assignments",  label: "Assignments",         icon: ClipboardList },
+  { href: "/admin/targets",      label: "Targets",             icon: Target },
+  { href: "/admin/data",         label: "Data Management",     icon: Database },
+  { href: "/admin/approvals",    label: "Approvals Config",    icon: CheckSquare },
+  { href: "/admin/integrations", label: "Integrations",        icon: Plug },
+  { href: "/admin/audit",        label: "Audit Logs",          icon: Activity },
+  { href: "/admin/settings",     label: "Settings",            icon: Settings },
+  { href: "/admin/reports",      label: "Reports",             icon: FileText },
+];
+
 export const roleNavItems: Record<string, NavItem[]> = {
+  ADMIN: adminNavItems,
+  Admin: adminNavItems,
+  admin: adminNavItems,
+  SYSTEM_ADMIN: adminNavItems,
+  "System Admin": adminNavItems,
+  system_admin: adminNavItems,
   AM: amNavItems,
   ACCOUNT_MANAGER: amNavItems,
   "Account Manager": amNavItems,
@@ -55,14 +77,6 @@ export const roleNavItems: Record<string, NavItem[]> = {
   HoB: hobNavItems,
   "Head of Business": hobNavItems,
   CEO: [
-    { href: "/ceo",           label: "Dashboard",           icon: LayoutDashboard },
-    { href: "/executive-overview",  label: "Executive Overview",  icon: Globe },
-    { href: "/country-performance", label: "Country Performance", icon: BarChart3 },
-    { href: "/revenue",       label: "Revenue",             icon: DollarSign },
-    { href: "/strategic-risks", label: "Strategic Risks",     icon: AlertTriangle },
-    { href: "/reports",      label: "Reports",             icon: FileText },
-  ],
-  ADMIN: [
     { href: "/ceo",           label: "Dashboard",           icon: LayoutDashboard },
     { href: "/executive-overview",  label: "Executive Overview",  icon: Globe },
     { href: "/country-performance", label: "Country Performance", icon: BarChart3 },
