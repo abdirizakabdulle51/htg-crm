@@ -27,47 +27,47 @@ export function Header() {
     },
     "/admin/users": {
       title: "Users",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Manage CRM users, access, roles, countries, and account status.",
     },
     "/admin/roles": {
       title: "Roles & Permissions",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Manage CRM roles, workspace permissions, access levels, and governance.",
     },
     "/admin/countries": {
       title: "Countries",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Configure country offices, regional structure, GM ownership, and administrative readiness.",
     },
     "/admin/assignments": {
       title: "Assignments",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Manage customer ownership, GM assignments, and Account Manager allocation.",
     },
     "/admin/targets": {
       title: "Targets",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Configure company, country, GM, and Account Manager performance targets.",
     },
     "/admin/data": {
       title: "Data Management",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Monitor CRM data quality, imports, duplicates, synchronization, and integrity.",
     },
     "/admin/approvals": {
-      title: "Approvals Config",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      title: "Approvals Configuration",
+      description: "Configure approval rules, thresholds, commercial workflows, and governance.",
     },
     "/admin/integrations": {
       title: "Integrations",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Monitor external services, authentication, messaging, storage, and platform connectivity.",
     },
     "/admin/audit": {
       title: "Audit Logs",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Review user activity, system events, configuration history, and security auditing.",
     },
     "/admin/settings": {
       title: "Settings",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Configure CRM behavior, defaults, notifications, and global system preferences.",
     },
     "/admin/reports": {
       title: "Reports",
-      description: "Manage users, roles, permissions, configuration, integrations, and system governance.",
+      description: "Generate administrative reports, configuration exports, audit summaries, and system analytics.",
     },
     "/ceo": {
       title: "Executive Intelligence Center",
