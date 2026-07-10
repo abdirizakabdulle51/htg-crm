@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { tenantARR } from "@/components/dashboard/executive-utils";
@@ -17,6 +18,7 @@ type AlertTone = "red" | "yellow" | "green";
 type AlertItem = {
   tone: AlertTone;
   message: string;
+  href: string;
 };
 
 const toneClasses: Record<AlertTone, string> = {
@@ -55,11 +57,13 @@ export function ExecutiveAlerts({ tenants, countryTargets }: ExecutiveAlertsProp
     if (gapPercent > 10) {
       alerts.push({
         tone: "red",
+        href: `/country-performance?country=${encodeURIComponent(country)}`,
         message: `${country} ARR is ${gapPercent.toFixed(0)}% below Q3 target (${formatUSD(current)} of ${formatUSD(target)}).`,
       });
     } else if (current >= target) {
       alerts.push({
         tone: "green",
+        href: `/country-performance?country=${encodeURIComponent(country)}`,
         message: `${country} has exceeded its Q3 target by ${formatUSD(current - target)}.`,
       });
     }
@@ -71,6 +75,7 @@ export function ExecutiveAlerts({ tenants, countryTargets }: ExecutiveAlertsProp
   if (upcomingRenewal) {
     alerts.push({
       tone: "yellow",
+      href: `/strategic-risks?tenant=${encodeURIComponent(upcomingRenewal.name)}`,
       message: `${upcomingRenewal.name} renewal is due in ${daysUntil(upcomingRenewal.renewal_date ?? upcomingRenewal.renewalDate)} days.`,
     });
   }
@@ -79,6 +84,7 @@ export function ExecutiveAlerts({ tenants, countryTargets }: ExecutiveAlertsProp
   if (atRiskCount > 1) {
     alerts.push({
       tone: "yellow",
+      href: "/strategic-risks?filter=at-risk",
       message: `${atRiskCount} tenants are currently above the risk threshold.`,
     });
   }
@@ -87,6 +93,7 @@ export function ExecutiveAlerts({ tenants, countryTargets }: ExecutiveAlertsProp
     const totalARR = rows.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
     alerts.push({
       tone: "green",
+      href: "/revenue?view=arr",
       message: `Enterprise ARR base is stable at ${formatUSD(totalARR)} across ${rows.length} active accounts.`,
     });
   }
@@ -111,10 +118,24 @@ export function ExecutiveAlerts({ tenants, countryTargets }: ExecutiveAlertsProp
         ) : visibleAlerts.length ? (
           <div className="grid gap-2 md:grid-cols-2">
             {visibleAlerts.map((alert) => (
-              <div className={cn("flex items-start gap-3 rounded-md border p-3", toneClasses[alert.tone])} key={alert.message}>
+              <Link
+                aria-label={`${alert.message} Open detail view`}
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-md border p-3 transition hover:shadow-sm hover:ring-1 hover:ring-current/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2",
+                  toneClasses[alert.tone],
+                )}
+                href={alert.href}
+                key={alert.message}
+                onKeyDown={(event) => {
+                  if (event.key === " ") {
+                    event.preventDefault();
+                    event.currentTarget.click();
+                  }
+                }}
+              >
                 <span className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", dotClasses[alert.tone])} />
                 <p className="text-sm leading-5">{alert.message}</p>
-              </div>
+              </Link>
             ))}
           </div>
         ) : (

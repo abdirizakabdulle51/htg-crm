@@ -9,7 +9,7 @@ import { CalendarClock, ShieldAlert, TrendingDown } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate, formatUSD } from "@/lib/utils";
+import { cn, formatDate, formatUSD } from "@/lib/utils";
 import type { Contract, Tenant } from "@/types/crm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
@@ -94,6 +94,7 @@ export function StrategicRisks() {
 function StrategicRisksContent() {
   const searchParams = useSearchParams();
   const filter = searchParams.get("filter");
+  const tenantParam = searchParams.get("tenant")?.trim() ?? "";
   const { data: session, status } = useSession();
   const token = typeof session?.accessToken === "string" ? session.accessToken : "";
 
@@ -128,16 +129,25 @@ function StrategicRisksContent() {
   const atRiskRows = (atRisk ?? []).slice().sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0));
   const churnRiskARR = atRiskRows.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
   const activeRows = (tenants ?? []).filter((tenant) => tenant.status === "ACTIVE");
+  const tenantMatch = tenantParam ? (tenants ?? []).find((tenant) => tenant.name.toLowerCase() === tenantParam.toLowerCase()) : undefined;
   const filterRows =
-    filter === "active"
+    tenantParam
+      ? tenantMatch
+        ? [tenantMatch]
+        : []
+      : filter === "active"
       ? activeRows
       : filter === "at-risk"
         ? (tenants ?? [])
             .filter((tenant) => tenant.status === "AT_RISK" || (tenant.risk_score ?? 0) > 50)
             .sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))
         : atRiskRows;
-  const tableTitle = filter === "active" ? "Active Tenants" : "At-Risk Tenants";
-  const emptyMessage = filter === "active" ? "No active tenants found." : "No at-risk tenants found.";
+  const tableTitle = tenantParam ? "Tenant Risk Detail" : filter === "active" ? "Active Tenants" : "At-Risk Tenants";
+  const emptyMessage = tenantParam
+    ? `No tenant found for "${tenantParam}".`
+    : filter === "active"
+      ? "No active tenants found."
+      : "No at-risk tenants found.";
   const decliningUsage = (tenants ?? [])
     .filter((tenant) => (tenant.risk_score ?? 0) >= 55 || tenant.status === "AT_RISK")
     .sort((a, b) => usageDeclinePercent(b) - usageDeclinePercent(a))
@@ -159,6 +169,13 @@ function StrategicRisksContent() {
       {filter === "at-risk" && (
         <ContextBanner href="/strategic-risks" title="Showing at-risk tenants">
           Tenants marked AT_RISK or with risk score above 50 are highlighted for executive follow-up.
+        </ContextBanner>
+      )}
+      {tenantParam && (
+        <ContextBanner href="/strategic-risks" title={`Viewing ${tenantParam}`}>
+          {tenantMatch
+            ? "The matching tenant is highlighted for risk and renewal context."
+            : "No matching tenant was found in the current tenant data."}
         </ContextBanner>
       )}
 
@@ -217,7 +234,13 @@ function StrategicRisksContent() {
                 {filterRows.map((tenant) => {
                   const score = tenant.risk_score ?? 0;
                   return (
-                    <tr className="border-b last:border-0" key={tenant.id}>
+                    <tr
+                      className={cn(
+                        "border-b last:border-0",
+                        tenantParam && tenant.name.toLowerCase() === tenantParam.toLowerCase() ? "bg-teal-50 ring-1 ring-inset ring-teal-200" : "",
+                      )}
+                      key={tenant.id}
+                    >
                       <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{tenant.country ?? "Unassigned"}</td>
                       <td className="py-3 pr-4">

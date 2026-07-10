@@ -68,6 +68,8 @@ export default function CountryPerformancePage() {
 function CountryPerformanceContent() {
   const searchParams = useSearchParams();
   const pipelineView = searchParams.get("view") === "pipeline";
+  const selectedCountryParam = searchParams.get("country");
+  const selectedCountry = COUNTRIES.find((country) => country.name.toLowerCase() === selectedCountryParam?.toLowerCase())?.name;
   const { data: session, status } = useSession();
   const token = typeof session?.accessToken === "string" ? session.accessToken : "";
 
@@ -158,9 +160,24 @@ function CountryPerformanceContent() {
         </div>
       )}
 
+      {selectedCountry && (
+        <div className="flex flex-col gap-3 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold">Viewing {selectedCountry} performance</p>
+            <p className="mt-1 text-teal-800">{selectedCountry} is highlighted while other country cards remain visible.</p>
+          </div>
+          <Link className="shrink-0 font-medium text-teal-700 underline-offset-4 hover:underline" href="/country-performance">
+            Clear view
+          </Link>
+        </div>
+      )}
+
       <div className="grid gap-4 xl:grid-cols-4">
         {rows.map((country) => (
-          <Card className="overflow-hidden" key={country.code}>
+          <Card
+            className={`overflow-hidden ${selectedCountry === country.name ? "border-teal-300 shadow-md ring-1 ring-teal-100" : ""}`}
+            key={country.code}
+          >
             <CardHeader className="border-b bg-muted/30">
               <CardTitle className="flex items-center justify-between gap-3">
                 <span>{country.name}</span>
