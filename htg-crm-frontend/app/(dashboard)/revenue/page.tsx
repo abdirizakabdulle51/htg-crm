@@ -1,13 +1,16 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { Suspense, type ReactNode } from "react";
 import useSWR from "swr";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatUSD } from "@/lib/utils";
-import type { Tenant } from "@/types/crm";
+import type { ForecastResponse, PipelineOverview, TeamTargetsResponse, Tenant } from "@/types/crm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 
@@ -30,6 +33,14 @@ type ApiEnvelope<T> = {
   } | null;
 };
 
+type TargetsApiResponse = {
+  targets?: Array<{
+    country?: string | null;
+    account_manager_id?: string | null;
+    target_arr_usd: number;
+  }>;
+};
+
 function tenantARR(tenant: Tenant) {
   return tenant.arr_usd ?? tenant.arrUsd ?? (tenant.monthly_revenue_usd ?? tenant.mrr_usd ?? 0) * 12;
 }
@@ -47,7 +58,43 @@ function healthVariant(status: string) {
   return "bg-red-500 text-white";
 }
 
+function cardHighlight(active: boolean) {
+  return active ? "border-teal-300 shadow-md ring-1 ring-teal-100" : "";
+}
+
+function ContextBanner({
+  title,
+  children,
+  href,
+}: {
+  title: string;
+  children: ReactNode;
+  href: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="font-semibold">{title}</p>
+        <p className="mt-1 text-teal-800">{children}</p>
+      </div>
+      <Link className="shrink-0 font-medium text-teal-700 underline-offset-4 hover:underline" href={href}>
+        Clear view
+      </Link>
+    </div>
+  );
+}
+
 export default function RevenuePage() {
+  return (
+    <Suspense fallback={<div className="space-y-5" />}>
+      <RevenueContent />
+    </Suspense>
+  );
+}
+
+function RevenueContent() {
+  const searchParams = useSearchParams();
+  const view = searchParams.get("view");
   const { data: session, status } = useSession();
   const token = typeof session?.accessToken === "string" ? session.accessToken : "";
 
@@ -71,8 +118,30 @@ export default function RevenuePage() {
   const { data: tenants } = useSWR<Tenant[]>(canFetch ? "/api/v1/tenants?limit=100" : null, authedFetcher, {
     refreshInterval: 120000,
   });
+  const { data: targets } = useSWR<TargetsApiResponse>(
+    canFetch ? "/api/v1/targets?quarter=3&year=2026" : null,
+    authedFetcher,
+    { refreshInterval: 120000 },
+  );
+  const { data: teamHealth } = useSWR<TeamTargetsResponse>(canFetch ? "/api/v1/targets/team" : null, authedFetcher, {
+    refreshInterval: 120000,
+  });
+  const { data: pipeline } = useSWR<PipelineOverview>(canFetch ? "/api/v1/pipeline" : null, authedFetcher, {
+    refreshInterval: 60000,
+  });
+  const { data: forecast } = useSWR<ForecastResponse>(canFetch ? "/api/v1/ai/forecast?scope=year" : null, authedFetcher, {
+    refreshInterval: 180000,
+  });
 
   const totalARR = (tenants ?? []).reduce((sum, tenant) => sum + tenantARR(tenant), 0);
+  const q3Target = (targets?.targets ?? [])
+    .filter((target) => !target.account_manager_id)
+    .reduce((sum, target) => sum + (target.target_arr_usd ?? 0), 0);
+  const q3Achieved = (teamHealth?.team ?? []).reduce((sum, member) => sum + (member.achieved_usd ?? 0), 0);
+  const forecastValue = forecast?.adjusted_forecast_usd ?? 0;
+  const pipelineValue = pipeline?.total_value_usd ?? 0;
+  const wonThisMonth = pipeline?.won_this_month?.value ?? q3Achieved;
+  const wonCount = pipeline?.won_this_month?.count ?? 0;
   const sectorRows = Array.from(
     (tenants ?? []).reduce((totals, tenant) => {
       const sector = tenant.sector ?? tenant.sector_name ?? "Unassigned";
@@ -95,8 +164,36 @@ export default function RevenuePage() {
         <p className="text-sm text-muted-foreground">ARR concentration, sector mix, and monthly revenue trend.</p>
       </div>
 
+      {view === "arr" && (
+        <ContextBanner href="/revenue" title="Viewing Total ARR breakdown">
+          {formatUSD(totalARR)} total ARR across {(tenants ?? []).length.toLocaleString("en-US")} tenants. Sector and customer concentration are highlighted below.
+        </ContextBanner>
+      )}
+      {view === "targets" && (
+        <ContextBanner href="/revenue" title="Viewing Q3 target context">
+          Current company Q3 target is <strong>{formatUSD(q3Target)}</strong>.
+        </ContextBanner>
+      )}
+      {view === "achievement" && (
+        <ContextBanner href="/revenue" title="Viewing Q3 achieved revenue">
+          Current Q3 achieved revenue is <strong>{formatUSD(q3Achieved)}</strong>.
+        </ContextBanner>
+      )}
+      {view === "forecast" && (
+        <ContextBanner href="/revenue" title="Viewing Q3 forecast">
+          Forecast is <strong>{formatUSD(forecastValue)}</strong> with {formatUSD(pipelineValue)} in total pipeline context.
+        </ContextBanner>
+      )}
+      {view === "won" && (
+        <ContextBanner href="/revenue" title="Viewing deals won this month">
+          {wonCount > 0
+            ? `${wonCount} won deals total ${formatUSD(wonThisMonth)} this month.`
+            : "No detailed won opportunity rows are available on this page yet."}
+        </ContextBanner>
+      )}
+
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card className="h-[22rem] overflow-hidden">
+        <Card className={`h-[22rem] overflow-hidden ${cardHighlight(view === "achievement" || view === "forecast" || view === "won")}`}>
           <CardHeader className="pb-2">
             <CardTitle>Revenue by Month</CardTitle>
           </CardHeader>
@@ -113,7 +210,7 @@ export default function RevenuePage() {
           </CardContent>
         </Card>
 
-        <Card className="h-[22rem] overflow-hidden">
+        <Card className={`h-[22rem] overflow-hidden ${cardHighlight(view === "arr")}`}>
           <CardHeader className="pb-2">
             <CardTitle>Revenue by Sector</CardTitle>
           </CardHeader>
@@ -150,7 +247,7 @@ export default function RevenuePage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className={cardHighlight(view === "arr")}>
         <CardHeader>
           <CardTitle>Top 5 Tenants by ARR</CardTitle>
         </CardHeader>

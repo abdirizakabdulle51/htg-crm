@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { Suspense } from "react";
 import useSWR from "swr";
 import { AlertTriangle, BarChart3, Building2, Target, TrendingUp } from "lucide-react";
 
@@ -55,6 +58,16 @@ function achievementPercent(achieved: number, target: number) {
 }
 
 export default function CountryPerformancePage() {
+  return (
+    <Suspense fallback={<div className="space-y-5" />}>
+      <CountryPerformanceContent />
+    </Suspense>
+  );
+}
+
+function CountryPerformanceContent() {
+  const searchParams = useSearchParams();
+  const pipelineView = searchParams.get("view") === "pipeline";
   const { data: session, status } = useSession();
   const token = typeof session?.accessToken === "string" ? session.accessToken : "";
 
@@ -133,6 +146,18 @@ export default function CountryPerformancePage() {
         <p className="text-sm text-muted-foreground">Q3 2026 performance across Somalia, Kenya, Ethiopia, and Djibouti.</p>
       </div>
 
+      {pipelineView && (
+        <div className="flex flex-col gap-3 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold">Viewing country pipeline breakdown</p>
+            <p className="mt-1 text-teal-800">Pipeline values are highlighted in each country card.</p>
+          </div>
+          <Link className="shrink-0 font-medium text-teal-700 underline-offset-4 hover:underline" href="/country-performance">
+            Clear view
+          </Link>
+        </div>
+      )}
+
       <div className="grid gap-4 xl:grid-cols-4">
         {rows.map((country) => (
           <Card className="overflow-hidden" key={country.code}>
@@ -149,7 +174,7 @@ export default function CountryPerformancePage() {
               <Metric label="Revenue Gap" value={formatUSD(country.revenueGap)} icon={AlertTriangle} />
               <Metric label="Active Tenants" value={country.activeTenants.toLocaleString("en-US")} icon={Building2} />
               <Metric label="At-Risk Tenants" value={country.atRiskTenants.toLocaleString("en-US")} icon={AlertTriangle} />
-              <Metric label="Pipeline Value" value={formatUSD(country.pipelineValue)} icon={BarChart3} />
+              <Metric label="Pipeline Value" value={formatUSD(country.pipelineValue)} icon={BarChart3} emphasized={pipelineView} />
             </CardContent>
           </Card>
         ))}
@@ -162,21 +187,23 @@ function Metric({
   label,
   value,
   detail,
+  emphasized,
   icon: Icon,
 }: {
   label: string;
   value: string;
   detail?: string;
+  emphasized?: boolean;
   icon: typeof BarChart3;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className={`flex items-center justify-between gap-3 ${emphasized ? "rounded-md border border-teal-200 bg-teal-50 p-3" : ""}`}>
       <div>
         <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="mt-1 text-lg font-semibold">{value}</p>
+        <p className={`mt-1 text-lg font-semibold ${emphasized ? "text-teal-700" : ""}`}>{value}</p>
         {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
       </div>
-      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <Icon className={`h-4 w-4 shrink-0 ${emphasized ? "text-teal-600" : "text-muted-foreground"}`} />
     </div>
   );
 }

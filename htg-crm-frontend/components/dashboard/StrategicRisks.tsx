@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { Suspense, type ReactNode } from "react";
 import useSWR from "swr";
 import { CalendarClock, ShieldAlert, TrendingDown } from "lucide-react";
 
@@ -40,6 +43,7 @@ function riskReason(tenant: Tenant) {
 
 function recommendedAction(tenant: Tenant) {
   const score = tenant.risk_score ?? 0;
+  if (tenant.status === "ACTIVE" && score < 50) return "Maintain relationship and monitor customer health.";
   if (score >= 80) return "Schedule an executive retention call this week.";
   if (score >= 70) return "Create a recovery plan with the account manager and service owner.";
   return "Confirm next action, renewal owner, and service satisfaction.";
@@ -57,7 +61,39 @@ function daysUntil(endDate: string, provided?: number) {
   return Math.max(0, Math.ceil((end.getTime() - today.getTime()) / 86400000));
 }
 
+function ContextBanner({
+  title,
+  children,
+  href,
+}: {
+  title: string;
+  children: ReactNode;
+  href: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="font-semibold">{title}</p>
+        <p className="mt-1 text-teal-800">{children}</p>
+      </div>
+      <Link className="shrink-0 font-medium text-teal-700 underline-offset-4 hover:underline" href={href}>
+        Clear view
+      </Link>
+    </div>
+  );
+}
+
 export function StrategicRisks() {
+  return (
+    <Suspense fallback={<div className="space-y-5" />}>
+      <StrategicRisksContent />
+    </Suspense>
+  );
+}
+
+function StrategicRisksContent() {
+  const searchParams = useSearchParams();
+  const filter = searchParams.get("filter");
   const { data: session, status } = useSession();
   const token = typeof session?.accessToken === "string" ? session.accessToken : "";
 
@@ -91,6 +127,17 @@ export function StrategicRisks() {
   const tenantByID = new Map((tenants ?? []).map((tenant) => [tenant.id, tenant]));
   const atRiskRows = (atRisk ?? []).slice().sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0));
   const churnRiskARR = atRiskRows.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
+  const activeRows = (tenants ?? []).filter((tenant) => tenant.status === "ACTIVE");
+  const filterRows =
+    filter === "active"
+      ? activeRows
+      : filter === "at-risk"
+        ? (tenants ?? [])
+            .filter((tenant) => tenant.status === "AT_RISK" || (tenant.risk_score ?? 0) > 50)
+            .sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))
+        : atRiskRows;
+  const tableTitle = filter === "active" ? "Active Tenants" : "At-Risk Tenants";
+  const emptyMessage = filter === "active" ? "No active tenants found." : "No at-risk tenants found.";
   const decliningUsage = (tenants ?? [])
     .filter((tenant) => (tenant.risk_score ?? 0) >= 55 || tenant.status === "AT_RISK")
     .sort((a, b) => usageDeclinePercent(b) - usageDeclinePercent(a))
@@ -103,6 +150,17 @@ export function StrategicRisks() {
         <h1 className="text-2xl font-semibold tracking-normal">Strategic Risks</h1>
         <p className="text-sm text-muted-foreground">Churn exposure, usage risk, and renewal pressure across the customer base.</p>
       </div>
+
+      {filter === "active" && (
+        <ContextBanner href="/strategic-risks" title="Showing active tenants">
+          Active customer accounts are highlighted in the tenant list while the strategic risk summaries remain visible.
+        </ContextBanner>
+      )}
+      {filter === "at-risk" && (
+        <ContextBanner href="/strategic-risks" title="Showing at-risk tenants">
+          Tenants marked AT_RISK or with risk score above 50 are highlighted for executive follow-up.
+        </ContextBanner>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -141,7 +199,7 @@ export function StrategicRisks() {
 
       <Card>
         <CardHeader>
-          <CardTitle>At-Risk Tenants</CardTitle>
+          <CardTitle>{tableTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -156,7 +214,7 @@ export function StrategicRisks() {
                 </tr>
               </thead>
               <tbody>
-                {atRiskRows.map((tenant) => {
+                {filterRows.map((tenant) => {
                   const score = tenant.risk_score ?? 0;
                   return (
                     <tr className="border-b last:border-0" key={tenant.id}>
@@ -173,7 +231,7 @@ export function StrategicRisks() {
               </tbody>
             </table>
           </div>
-          {!atRiskRows.length && <p className="py-6 text-sm text-muted-foreground">No at-risk tenants found.</p>}
+          {!filterRows.length && <p className="py-6 text-sm text-muted-foreground">{emptyMessage}</p>}
         </CardContent>
       </Card>
 
