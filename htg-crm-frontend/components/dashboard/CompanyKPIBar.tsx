@@ -35,11 +35,11 @@ export function CompanyKPIBar({ pipeline, team, forecast, tenants, atRisk, q3Tar
   ];
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8">
       {cards.map((card) => (
         <TremorCard className="rounded-lg border shadow-sm" key={card.label}>
           <Text>{card.label}</Text>
-          <Metric className="mt-1 text-xl">{card.value}</Metric>
+          <Metric className="mt-1 break-words text-xl tracking-tight xl:text-2xl 2xl:text-3xl">{card.value}</Metric>
         </TremorCard>
       ))}
     </div>
