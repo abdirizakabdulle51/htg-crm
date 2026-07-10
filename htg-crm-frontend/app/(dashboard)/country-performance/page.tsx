@@ -43,8 +43,11 @@ type LeadsApiResponse = {
 
 type Lead = {
   id: string;
-  country_id: string;
-  value_usd: number;
+  country?: string;
+  country_id?: string;
+  value_usd?: number;
+  valueUsd?: number;
+  stage?: string | number;
   stage_number?: number;
 };
 
@@ -55,6 +58,24 @@ function tenantARR(tenant: Tenant) {
 function achievementPercent(achieved: number, target: number) {
   if (target <= 0) return "0.0%";
   return `${((achieved / target) * 100).toFixed(1)}%`;
+}
+
+function leadValue(lead: Lead) {
+  return lead.value_usd ?? lead.valueUsd ?? 0;
+}
+
+function leadCountry(lead: Lead, countriesByID: Map<string, string>) {
+  return lead.country ?? (lead.country_id ? countriesByID.get(lead.country_id) : undefined);
+}
+
+function leadStageNumber(lead: Lead) {
+  if (typeof lead.stage_number === "number") return lead.stage_number;
+  if (typeof lead.stage === "number") return lead.stage;
+  if (typeof lead.stage === "string") {
+    const parsed = Number.parseInt(lead.stage, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 export default function CountryPerformancePage() {
@@ -106,6 +127,11 @@ function CountryPerformanceContent() {
     authedFetcher,
     { refreshInterval: 120000 },
   );
+  const { data: allLeadsData } = useSWR<LeadsApiResponse | Lead[]>(
+    canFetch ? "/api/v1/leads?limit=100" : null,
+    authedFetcher,
+    { refreshInterval: 120000 },
+  );
 
   const countriesByID = new Map((pipeline?.by_country ?? []).map((country) => [country.country_id, country.country]));
   const countryIDsByName = new Map((pipeline?.by_country ?? []).map((country) => [country.country, country.country_id]));
@@ -116,6 +142,7 @@ function CountryPerformanceContent() {
       .map((target) => [target.country as string, target.target_arr_usd]),
   );
   const leads = Array.isArray(wonLeads) ? wonLeads : wonLeads?.items ?? wonLeads?.leads ?? [];
+  const allLeads = Array.isArray(allLeadsData) ? allLeadsData : allLeadsData?.items ?? allLeadsData?.leads ?? [];
 
   const rows = COUNTRIES.map((country) => {
     const countryID = countryIDsByName.get(country.name);
@@ -124,8 +151,8 @@ function CountryPerformanceContent() {
       return tenantCountry === country.name;
     });
     const achieved = leads
-      .filter((lead) => lead.country_id === countryID)
-      .reduce((sum, lead) => sum + (lead.value_usd ?? 0), 0);
+      .filter((lead) => leadCountry(lead, countriesByID) === country.name || lead.country_id === countryID)
+      .reduce((sum, lead) => sum + leadValue(lead), 0);
     const target = targetByCountry.get(country.name) ?? 0;
     const totalARR = countryTenants.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
 
@@ -140,6 +167,36 @@ function CountryPerformanceContent() {
       pipelineValue: pipelineByCountry.get(country.name) ?? 0,
     };
   }).sort((a, b) => b.totalARR - a.totalARR);
+  const selectedRow = selectedCountry ? rows.find((country) => country.name === selectedCountry) : undefined;
+  const selectedCountryID = selectedCountry ? countryIDsByName.get(selectedCountry) : undefined;
+  const selectedCountryTenants = selectedCountry
+    ? (tenants ?? [])
+        .filter((tenant) => {
+          const tenantCountry = tenant.country ?? (tenant.country_id ? countriesByID.get(tenant.country_id) : undefined);
+          return tenantCountry === selectedCountry;
+        })
+        .sort((a, b) => tenantARR(b) - tenantARR(a))
+    : [];
+  const selectedCountryLeads = selectedCountry
+    ? allLeads.filter((lead) => leadCountry(lead, countriesByID) === selectedCountry || lead.country_id === selectedCountryID)
+    : [];
+  const stageNames = new Map((pipeline?.by_stage ?? []).map((stage) => [stage.stage, stage.name]));
+  const selectedStageBreakdown = Array.from(
+    selectedCountryLeads.reduce<Map<number, { stage: number; name: string; count: number; value: number }>>((acc, lead) => {
+      const stage = leadStageNumber(lead);
+      if (typeof stage !== "number") return acc;
+      const existing = acc.get(stage) ?? {
+        stage,
+        name: stageNames.get(stage) ?? `Stage ${stage}`,
+        count: 0,
+        value: 0,
+      };
+      existing.count += 1;
+      existing.value += leadValue(lead);
+      acc.set(stage, existing);
+      return acc;
+    }, new Map()).values(),
+  ).sort((a, b) => a.stage - b.stage);
 
   return (
     <div className="space-y-5">
@@ -174,28 +231,124 @@ function CountryPerformanceContent() {
 
       <div className="grid gap-4 xl:grid-cols-4">
         {rows.map((country) => (
-          <Card
-            className={`overflow-hidden ${selectedCountry === country.name ? "border-teal-300 shadow-md ring-1 ring-teal-100" : ""}`}
+          <Link
+            aria-label={`View ${country.name} performance details`}
+            className="block h-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2"
+            href={`/country-performance?country=${encodeURIComponent(country.name)}`}
             key={country.code}
+            onKeyDown={(event) => {
+              if (event.key === " ") {
+                event.preventDefault();
+                event.currentTarget.click();
+              }
+            }}
           >
-            <CardHeader className="border-b bg-muted/30">
-              <CardTitle className="flex items-center justify-between gap-3">
-                <span>{country.name}</span>
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-5">
-              <Metric label="Total ARR" value={formatUSD(country.totalARR)} icon={TrendingUp} />
-              <Metric label="Q3 Target" value={formatUSD(country.q3Target)} icon={Target} />
-              <Metric label="Achievement" value={country.achievement} detail="Q3 new deals won" icon={TrendingUp} />
-              <Metric label="Revenue Gap" value={formatUSD(country.revenueGap)} icon={AlertTriangle} />
-              <Metric label="Active Tenants" value={country.activeTenants.toLocaleString("en-US")} icon={Building2} />
-              <Metric label="At-Risk Tenants" value={country.atRiskTenants.toLocaleString("en-US")} icon={AlertTriangle} />
-              <Metric label="Pipeline Value" value={formatUSD(country.pipelineValue)} icon={BarChart3} emphasized={pipelineView} />
-            </CardContent>
-          </Card>
+            <Card
+              className={`h-full overflow-hidden transition hover:border-teal-200 hover:shadow-sm ${
+                selectedCountry === country.name ? "border-teal-300 bg-teal-50/40 shadow-md ring-1 ring-teal-100" : ""
+              }`}
+            >
+              <CardHeader className="border-b bg-muted/30">
+                <CardTitle className="flex items-center justify-between gap-3">
+                  <span>{country.name}</span>
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-5">
+                <Metric label="Total ARR" value={formatUSD(country.totalARR)} icon={TrendingUp} />
+                <Metric label="Q3 Target" value={formatUSD(country.q3Target)} icon={Target} />
+                <Metric label="Achievement" value={country.achievement} detail="Q3 new deals won" icon={TrendingUp} />
+                <Metric label="Revenue Gap" value={formatUSD(country.revenueGap)} icon={AlertTriangle} />
+                <Metric label="Active Tenants" value={country.activeTenants.toLocaleString("en-US")} icon={Building2} />
+                <Metric label="At-Risk Tenants" value={country.atRiskTenants.toLocaleString("en-US")} icon={AlertTriangle} />
+                <Metric label="Pipeline Value" value={formatUSD(country.pipelineValue)} icon={BarChart3} emphasized={pipelineView || selectedCountry === country.name} />
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
+
+      {selectedRow && (
+        <Card>
+          <CardHeader className="flex flex-col gap-3 border-b sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>{selectedRow.name} Performance Details</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">Country-level target, tenant, and pipeline context.</p>
+            </div>
+            <Link className="text-sm font-medium text-teal-700 underline-offset-4 hover:underline" href="/country-performance">
+              Clear country selection
+            </Link>
+          </CardHeader>
+          <CardContent className="space-y-6 pt-5">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <Metric label="Total ARR" value={formatUSD(selectedRow.totalARR)} icon={TrendingUp} />
+              <Metric label="Q3 Target" value={formatUSD(selectedRow.q3Target)} icon={Target} />
+              <Metric label="Achievement" value={selectedRow.achievement} icon={TrendingUp} />
+              <Metric label="Revenue Gap" value={formatUSD(selectedRow.revenueGap)} icon={AlertTriangle} />
+              <Metric label="Active Tenants" value={selectedRow.activeTenants.toLocaleString("en-US")} icon={Building2} />
+              <Metric label="At-Risk Tenants" value={selectedRow.atRiskTenants.toLocaleString("en-US")} icon={AlertTriangle} />
+              <Metric label="Pipeline Value" value={formatUSD(selectedRow.pipelineValue)} icon={BarChart3} emphasized />
+              <Metric label="Country Forecast" value="—" detail="No country forecast data available" icon={TrendingUp} />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="rounded-lg border p-4">
+                <h2 className="text-base font-semibold">Top Tenants</h2>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="py-3 pr-4 font-medium">Tenant</th>
+                        <th className="py-3 pr-4 font-medium">Sector</th>
+                        <th className="py-3 pr-4 font-medium">ARR</th>
+                        <th className="py-3 font-medium">Risk</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedCountryTenants.slice(0, 5).map((tenant) => (
+                        <tr className="border-b last:border-0" key={tenant.id}>
+                          <td className="py-3 pr-4 font-medium">{tenant.name}</td>
+                          <td className="py-3 pr-4 text-muted-foreground">{tenant.sector ?? tenant.sector_name ?? "—"}</td>
+                          <td className="py-3 pr-4 font-semibold">{formatUSD(tenantARR(tenant))}</td>
+                          <td className="py-3">{tenant.risk_score ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!selectedCountryTenants.length && <p className="mt-4 text-sm text-muted-foreground">No tenants available for this country.</p>}
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <h2 className="text-base font-semibold">Pipeline Stage Breakdown</h2>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[460px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="py-3 pr-4 font-medium">Stage</th>
+                        <th className="py-3 pr-4 font-medium">Count</th>
+                        <th className="py-3 font-medium">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedStageBreakdown.map((stage) => (
+                        <tr className="border-b last:border-0" key={stage.stage}>
+                          <td className="py-3 pr-4 font-medium">{stage.name}</td>
+                          <td className="py-3 pr-4">{stage.count}</td>
+                          <td className="py-3 font-semibold">{formatUSD(stage.value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!selectedStageBreakdown.length && (
+                  <p className="mt-4 text-sm text-muted-foreground">Country pipeline stage breakdown is unavailable from the current API data.</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
