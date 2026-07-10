@@ -19,6 +19,7 @@ import { RevenueTrend } from "@/components/dashboard/RevenueTrend";
 import SetTargetsModal from "@/components/dashboard/SetTargetsModal";
 import { StrategicAccounts } from "@/components/dashboard/StrategicAccounts";
 import { StrategicOpportunities, type StrategicOpportunity } from "@/components/dashboard/StrategicOpportunities";
+import { buildKeyAccountManagers, TopKeyAccountManagers } from "@/components/dashboard/TopKeyAccountManagers";
 import { apiFetch } from "@/lib/api";
 import type {
   ForecastResponse,
@@ -141,6 +142,8 @@ export function ExecutiveDashboard() {
   );
 
   const q3Achieved = (teamHealth?.team ?? []).reduce((sum, member) => sum + (member.achieved_usd ?? 0), 0);
+  const keyAccountManagers = buildKeyAccountManagers({ countryTargets, pipeline, tenants });
+  const topAccountManager = keyAccountManagers[0] ?? null;
   const strategicOpportunities: StrategicOpportunity[] | null = leads
     ? unwrapLeads(leads)
         .map((lead) => ({
@@ -225,6 +228,10 @@ export function ExecutiveDashboard() {
         <RevenueBySectoChart sectors={pipeline?.by_sector} tenants={tenants} />
       </div>
 
+      <div className="col-span-12">
+        <TopKeyAccountManagers managers={keyAccountManagers} />
+      </div>
+
       <div className="col-span-12 h-80">
         <RevenueTrend tenants={tenants} />
       </div>
@@ -243,6 +250,7 @@ export function ExecutiveDashboard() {
           q3Achieved={q3Achieved}
           q3Target={q3Target}
           tenants={tenants}
+          topAccountManager={topAccountManager}
         />
       </div>
       <div className="col-span-12 h-96 xl:col-span-5">

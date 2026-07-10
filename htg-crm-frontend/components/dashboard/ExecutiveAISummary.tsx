@@ -4,6 +4,7 @@ import { BrainCircuit } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { tenantARR } from "@/components/dashboard/executive-utils";
+import type { KeyAccountManagerRow } from "@/components/dashboard/TopKeyAccountManagers";
 import { formatUSD } from "@/lib/utils";
 import type { Tenant } from "@/types/crm";
 
@@ -12,6 +13,7 @@ type ExecutiveAISummaryProps = {
   q3Achieved?: number;
   q3Target?: number;
   countryTargets?: Record<string, number>;
+  topAccountManager?: KeyAccountManagerRow | null;
 };
 
 function healthScore(tenant: Tenant) {
@@ -19,7 +21,13 @@ function healthScore(tenant: Tenant) {
   return typeof value === "number" ? value : 0;
 }
 
-export function ExecutiveAISummary({ tenants, q3Achieved = 0, q3Target = 0, countryTargets }: ExecutiveAISummaryProps) {
+export function ExecutiveAISummary({
+  tenants,
+  q3Achieved = 0,
+  q3Target = 0,
+  countryTargets,
+  topAccountManager,
+}: ExecutiveAISummaryProps) {
   const rows = tenants ?? [];
   const averageHealth = rows.length
     ? rows.reduce((sum, tenant) => sum + healthScore(tenant), 0) / rows.length
@@ -37,7 +45,11 @@ export function ExecutiveAISummary({ tenants, q3Achieved = 0, q3Target = 0, coun
     .sort((a, b) => b.gap - a.gap)[0];
   const recommendation =
     biggestGap && biggestGap.gap > 0
-      ? `Focus executive attention on ${biggestGap.country}; it has the largest Q3 ARR gap at ${formatUSD(biggestGap.gap)}.`
+      ? `Focus executive attention on ${biggestGap.country}; it has the largest Q3 ARR gap at ${formatUSD(biggestGap.gap)}.${
+          topAccountManager
+            ? ` Top performing Account Manager: ${topAccountManager.name} in ${topAccountManager.country}.`
+            : ""
+        }`
       : "Maintain current execution cadence; country-level ARR is tracking at or above target.";
 
   return (
@@ -59,6 +71,14 @@ export function ExecutiveAISummary({ tenants, q3Achieved = 0, q3Target = 0, coun
           <SummaryMetric
             label="Highest Risk Tenant"
             value={highestRiskTenant ? `${highestRiskTenant.name} (${highestRiskTenant.risk_score ?? 0})` : "No risk data"}
+          />
+          <SummaryMetric
+            label="Top Account Manager"
+            value={
+              topAccountManager
+                ? `${topAccountManager.name} (${topAccountManager.country}, ${topAccountManager.performance})`
+                : "No AM ranking yet"
+            }
           />
         </div>
         <div className="rounded-md bg-teal-50 p-3 text-sm text-teal-900">
