@@ -95,6 +95,7 @@ export default function RevenuePage() {
 function RevenueContent() {
   const searchParams = useSearchParams();
   const view = searchParams.get("view");
+  const sectorParam = searchParams.get("sector")?.trim() ?? "";
   const { data: session, status } = useSession();
   const token = typeof session?.accessToken === "string" ? session.accessToken : "";
 
@@ -155,6 +156,9 @@ function RevenueContent() {
       percentage: totalARR > 0 ? (arr / totalARR) * 100 : 0,
     }))
     .sort((a, b) => b.arr - a.arr);
+  const selectedSector = sectorParam
+    ? sectorRows.find((row) => row.sector.toLowerCase() === sectorParam.toLowerCase())?.sector ?? sectorParam
+    : "";
   const topTenants = [...(tenants ?? [])].sort((a, b) => tenantARR(b) - tenantARR(a)).slice(0, 5);
 
   return (
@@ -191,6 +195,13 @@ function RevenueContent() {
             : "No detailed won opportunity rows are available on this page yet."}
         </ContextBanner>
       )}
+      {selectedSector && (
+        <ContextBanner href="/revenue" title={`Viewing ${selectedSector} revenue`}>
+          {sectorRows.some((row) => row.sector.toLowerCase() === selectedSector.toLowerCase())
+            ? `${selectedSector} is highlighted in the sector breakdown while the full revenue view remains visible.`
+            : `No matching sector data was found for "${selectedSector}" in the current revenue dataset.`}
+        </ContextBanner>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className={`h-[22rem] overflow-hidden ${cardHighlight(view === "achievement" || view === "forecast" || view === "won")}`}>
@@ -210,7 +221,7 @@ function RevenueContent() {
           </CardContent>
         </Card>
 
-        <Card className={`h-[22rem] overflow-hidden ${cardHighlight(view === "arr")}`}>
+        <Card className={`h-[22rem] overflow-hidden ${cardHighlight(view === "arr" || Boolean(selectedSector))}`}>
           <CardHeader className="pb-2">
             <CardTitle>Revenue by Sector</CardTitle>
           </CardHeader>
@@ -227,7 +238,14 @@ function RevenueContent() {
             </ResponsiveContainer>
             <div className="space-y-3 overflow-auto pr-1">
               {sectorRows.map((row, index) => (
-                <div className="space-y-1" key={row.sector}>
+                <Link
+                  aria-label={`View ${row.sector} revenue details`}
+                  className={`block space-y-1 rounded-md p-2 transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2 ${
+                    selectedSector.toLowerCase() === row.sector.toLowerCase() ? "bg-teal-50 ring-1 ring-inset ring-teal-200" : ""
+                  }`}
+                  href={`/revenue?sector=${encodeURIComponent(row.sector)}`}
+                  key={row.sector}
+                >
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <div className="flex min-w-0 items-center gap-2">
                       <span
@@ -239,7 +257,7 @@ function RevenueContent() {
                     <span className="text-muted-foreground">{row.percentage.toFixed(1)}%</span>
                   </div>
                   <p className="text-xs text-muted-foreground">{formatUSD(row.arr)} ARR</p>
-                </div>
+                </Link>
               ))}
               {!sectorRows.length && <p className="text-sm text-muted-foreground">No sector revenue data yet.</p>}
             </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { tenantARR } from "@/components/dashboard/executive-utils";
@@ -48,7 +50,12 @@ export function StrategicAccounts({ tenants }: StrategicAccountsProps) {
               const score = healthScore(tenant);
               const risk = tenant.risk_score ?? 0;
               return (
-                <div className="grid gap-3 rounded-md border p-3 md:grid-cols-[minmax(0,1fr)_120px_120px_120px]" key={tenant.id}>
+                <Link
+                  aria-label={`View strategic risk context for ${tenant.name}`}
+                  className="grid gap-3 rounded-md border p-3 transition hover:border-teal-200 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2 md:grid-cols-[minmax(0,1fr)_120px_120px_120px]"
+                  href={`/strategic-risks?tenant=${encodeURIComponent(tenant.name)}`}
+                  key={tenant.id}
+                >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{tenant.name}</p>
                     <p className="truncate text-xs text-muted-foreground">{tenant.country ?? "Country pending"}</p>
@@ -65,7 +72,7 @@ export function StrategicAccounts({ tenants }: StrategicAccountsProps) {
                     <p className="text-xs text-muted-foreground">Risk</p>
                     <Badge className={cn("mt-1", riskClass(risk))}>{risk}</Badge>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
