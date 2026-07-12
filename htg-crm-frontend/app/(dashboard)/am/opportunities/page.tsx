@@ -1,428 +1,849 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
-import { CalendarClock, CircleDollarSign, Target, TrendingUp } from "lucide-react";
+import { AlertCircle, CalendarClock, CheckCircle2, CircleDollarSign, Edit3, Plus, Target, TrendingUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { formatUSD } from "@/lib/utils";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
-const STAGES = ["Prospect", "Qualified", "Proposal", "Negotiation", "Won", "Lost"] as const;
 
-const mockOpportunities: RawLead[] = [
-  {
-    name: "Banking Expansion",
-    customer: "Kenya Tenant 03",
-    country: "Kenya",
-    sector: "Finance",
-    stage: "Proposal",
-    value: 450000,
-    probability: 60,
-    closeDate: "2026-08-15",
-    owner: "Account Manager",
-  },
-  {
-    name: "Telecom Backup",
-    customer: "Kenya Tenant 01",
-    country: "Kenya",
-    sector: "Telecom",
-    stage: "Negotiation",
-    value: 280000,
-    probability: 75,
-    closeDate: "2026-07-30",
-    owner: "Account Manager",
-  },
-  {
-    name: "Government Cloud",
-    customer: "Kenya Tenant 05",
-    country: "Kenya",
-    sector: "Government",
-    stage: "Qualified",
-    value: 220000,
-    probability: 35,
-    closeDate: "2026-09-10",
-    owner: "Account Manager",
-  },
-  {
-    name: "Healthcare DR",
-    customer: "Kenya Tenant 04",
-    country: "Kenya",
-    sector: "Healthcare",
-    stage: "Prospect",
-    value: 200000,
-    probability: 20,
-    closeDate: "2026-10-01",
-    owner: "Account Manager",
-  },
-];
+const STAGE_LABELS: Record<number, string> = {
+  1: "New Lead",
+  2: "Qualified",
+  3: "Discovery",
+  4: "Solution Fit",
+  5: "Proposal",
+  6: "Negotiation",
+  7: "Procurement",
+  8: "Contracting",
+  9: "Won",
+  10: "Lost",
+  11: "Dormant",
+};
+
+const CREATE_STAGES = [1, 2, 3, 4, 5, 6, 7, 8];
+const BOARD_STAGES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const CLOSED_STAGES = new Set([9, 10, 11]);
 
 type ApiEnvelope<T> = {
   data?: T | null;
   error?: {
-    code: string;
-    message: string;
+    code?: string;
+    message?: string;
+    details?: unknown;
   } | null;
+  meta?: unknown;
+};
+
+type ApiError = {
+  status: number;
+  code: string;
+  message: string;
 };
 
 type RawLead = {
   id?: string | null;
-  name?: string | null;
-  opportunity_name?: string | null;
-  title?: string | null;
-  company_name?: string | null;
-  companyName?: string | null;
-  customer?: string | null;
-  tenant_name?: string | null;
-  country?: string | null;
-  country_id?: string | null;
-  country_name?: string | null;
-  countryName?: string | null;
-  tenant_country?: string | null;
-  sector?: string | null;
-  sector_id?: string | null;
-  sector_name?: string | null;
-  sectorName?: string | null;
-  industry?: string | null;
-  stage?: string | number | null;
-  status?: string | null;
-  pipeline_stage?: string | number | null;
-  pipelineStage?: string | number | null;
-  stage_name?: string | null;
-  stage_number?: number | null;
-  value?: number | null;
-  potential_value?: number | null;
-  value_usd?: number | null;
-  valueUsd?: number | null;
-  potential_value_usd?: number | null;
-  estimated_value?: number | null;
-  deal_value?: number | null;
-  amount?: number | null;
-  probability?: number | null;
-  win_probability?: number | null;
-  probability_percent?: number | null;
-  owner?: { name?: string | null } | string | null;
   owner_id?: string | null;
-  owner_name?: string | null;
-  ownerName?: string | null;
-  assigned_user_name?: string | null;
-  assigned_to?: string | null;
-  assignedTo?: string | null;
-  assigned_to_name?: string | null;
-  account_manager?: string | null;
-  accountManager?: string | null;
-  account_manager_name?: string | null;
-  account_manager_id?: string | null;
-  closeDate?: string | null;
-  close_date?: string | null;
+  country_id?: string | null;
+  region_id?: string | null;
+  sector_id?: string | null;
+  company_name?: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  stage?: string | number | null;
+  stage_number?: number | null;
+  stage_name?: string | null;
+  status?: string | null;
+  value_usd?: number | null;
+  value?: number | null;
+  probability?: number | null;
   expected_close_date?: string | null;
-  expectedCloseDate?: string | null;
-  tenant?: {
-    country?: string | null;
-    sector?: string | null;
-  } | null;
-  owner_user?: {
-    name?: string | null;
-  } | null;
-  user?: {
-    name?: string | null;
-  } | null;
+  source?: string | null;
+  notes?: string | null;
+  lost_reason?: string | null;
+  competitor?: string | null;
+  won_date?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 type Opportunity = {
   id: string;
-  name: string;
-  customer: string;
-  country: string;
-  sector: string;
-  stage: string;
+  ownerId: string;
+  countryId: string;
+  regionId: string;
+  sectorId: string;
+  companyName: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  stageNumber: number;
+  stageName: string;
+  status: string;
   value: number;
   probability: number;
-  closeDate: string;
-  owner: string;
+  expectedCloseDate: string;
+  source: string;
+  notes: string;
 };
 
-function unwrapList<T>(value: unknown, keys: string[]): T[] {
-  if (Array.isArray(value)) return value as T[];
-  if (!value || typeof value !== "object") return [];
-  const record = value as Record<string, unknown>;
-  for (const key of keys) {
-    if (Array.isArray(record[key])) return record[key] as T[];
+type RawTenant = {
+  id?: string | null;
+  name?: string | null;
+  country_id?: string | null;
+  region_id?: string | null;
+  sector_id?: string | null;
+  country?: string | null;
+  sector?: string | null;
+  account_manager_id?: string | null;
+};
+
+type TenantOption = {
+  id: string;
+  name: string;
+  countryId: string;
+  regionId: string;
+  sectorId: string;
+  country: string;
+  sector: string;
+};
+
+type UserProfile = {
+  id?: string | null;
+  name?: string | null;
+  email?: string | null;
+  role?: string | null;
+};
+
+type OpportunityForm = {
+  tenantId: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  stage: string;
+  value: string;
+  probability: string;
+  expectedCloseDate: string;
+  source: string;
+  notes: string;
+};
+
+type EditForm = {
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  value: string;
+  probability: string;
+  expectedCloseDate: string;
+  source: string;
+  notes: string;
+};
+
+type StageAction = "next" | "won" | "lost" | "dormant";
+
+type StageForm = {
+  action: StageAction;
+  reason: string;
+  competitor: string;
+  confirmed: boolean;
+};
+
+const emptyOpportunityForm: OpportunityForm = {
+  tenantId: "",
+  contactName: "",
+  contactEmail: "",
+  contactPhone: "",
+  stage: "1",
+  value: "",
+  probability: "20",
+  expectedCloseDate: "",
+  source: "",
+  notes: "",
+};
+
+const emptyStageForm: StageForm = {
+  action: "next",
+  reason: "",
+  competitor: "",
+  confirmed: false,
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function unwrapData<T>(value: unknown): T {
+  if (isRecord(value) && "data" in value && "error" in value) {
+    return value.data as T;
   }
+
+  return value as T;
+}
+
+function unwrapList<T>(value: unknown, keys: string[]): T[] {
+  const data = unwrapData<unknown>(value);
+
+  if (Array.isArray(data)) return data as T[];
+  if (!isRecord(data)) return [];
+
+  for (const key of keys) {
+    if (Array.isArray(data[key])) return data[key] as T[];
+  }
+
   return [];
 }
 
-async function fetchJson<T>(url: string, token: string): Promise<T> {
-  const response = await fetch(`${API}${url}`, {
+async function fetchJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API}${path}`, {
+    ...init,
     credentials: "include",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...init?.headers,
+    },
   });
-  const body = await response.json();
+
+  const text = await response.text();
+  const body = text ? (JSON.parse(text) as unknown) : null;
 
   if (!response.ok) {
-    const envelope = body as ApiEnvelope<T>;
-    throw new Error(envelope.error?.message ?? `Request failed: ${response.status}`);
+    const envelope = body as ApiEnvelope<T> | null;
+    throw {
+      status: response.status,
+      code: envelope?.error?.code ?? "REQUEST_FAILED",
+      message: envelope?.error?.message ?? `Request failed with status ${response.status}`,
+    } satisfies ApiError;
   }
 
-  if (body && typeof body === "object" && "data" in body && "error" in body) {
-    return (body as ApiEnvelope<T>).data as T;
+  return unwrapData<T>(body);
+}
+
+function apiErrorMessage(error: unknown) {
+  const apiError = error as Partial<ApiError>;
+  if (apiError.status === 401) return "Your session expired or the API rejected the token. Please sign in again.";
+  if (apiError.status === 403) return "You do not have permission to manage this opportunity.";
+  if (apiError.status === 404) return "The selected opportunity no longer exists.";
+  if (apiError.status === 422) return apiError.message ?? "Please check the form fields and try again.";
+  return apiError.message ?? "Something went wrong. Please try again.";
+}
+
+function sessionUserId(session: unknown) {
+  if (!isRecord(session)) return "";
+  const user = isRecord(session.user) ? session.user : {};
+
+  return firstString([
+    session.crmUserId,
+    session.userId,
+    session.id,
+    user.crmUserId,
+    user.userId,
+    user.id,
+    user.sub,
+  ]);
+}
+
+function firstString(values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
 
-  return body as T;
+  return "";
 }
 
-function ownerValue(lead: RawLead) {
-  const owner = typeof lead.owner === "string" ? lead.owner : lead.owner?.name;
-  return (
-    owner ??
-    lead.owner_name ??
-    lead.ownerName ??
-    lead.assigned_user_name ??
-    lead.assigned_to ??
-    lead.assignedTo ??
-    lead.assigned_to_name ??
-    lead.account_manager ??
-    lead.accountManager ??
-    lead.account_manager_name ??
-    lead.account_manager_id ??
-    lead.owner_id ??
-    lead.owner_user?.name ??
-    lead.user?.name ??
-    ""
-  );
-}
-
-function matchesAM(value: string, amName: string, amId: string) {
-  const normalizedValue = value.trim().toLowerCase();
-  if (!normalizedValue) return false;
-  return normalizedValue === amName.toLowerCase() || Boolean(amId && normalizedValue === amId.toLowerCase());
-}
-
-function scopedLeads(leads: RawLead[], amName: string, amId: string) {
-  const hasOwnerData = leads.some((lead) => ownerValue(lead));
-  if (hasOwnerData) {
-    const mine = leads.filter((lead) => matchesAM(ownerValue(lead), amName, amId));
-    if (mine.length) return mine;
-  }
-
-  const kenyaLeads = leads.filter((lead) => normalizeCountry(lead).toLowerCase() === "kenya");
-  return kenyaLeads.length ? kenyaLeads : leads.slice(0, 6);
-}
-
-function normalizeStage(stage: RawLead["stage"]) {
-  if (typeof stage === "number") {
-    if (stage <= 1) return "Prospect";
-    if (stage <= 3) return "Qualified";
-    if (stage <= 5) return "Proposal";
-    if (stage <= 8) return "Negotiation";
-    if (stage === 9) return "Won";
-    return "Lost";
-  }
-
-  const value = String(stage ?? "Prospect").trim();
-  const normalized = value.replace(/_/g, " ").toLowerCase();
-  if (normalized.includes("won")) return "Won";
-  if (normalized.includes("lost")) return "Lost";
-  if (normalized.includes("negotiation")) return "Negotiation";
-  if (normalized.includes("proposal")) return "Proposal";
-  if (normalized.includes("qualified")) return "Qualified";
-  if (normalized.includes("prospect") || normalized.includes("new")) return "Prospect";
-  return "Prospect";
-}
-
-function normalizeCountry(lead: RawLead) {
-  return lead.country ?? lead.country_name ?? lead.countryName ?? lead.tenant_country ?? lead.tenant?.country ?? "Unassigned";
-}
-
-function normalizeSector(lead: RawLead) {
-  return lead.sector ?? lead.sector_name ?? lead.sectorName ?? lead.industry ?? lead.tenant?.sector ?? "Unassigned";
-}
-
-function normalizeValue(lead: RawLead) {
-  return (
-    lead.value ??
-    lead.potential_value ??
-    lead.value_usd ??
-    lead.valueUsd ??
-    lead.potential_value_usd ??
-    lead.estimated_value ??
-    lead.deal_value ??
-    lead.amount ??
-    0
-  );
-}
-
-function normalizeProbability(lead: RawLead, stage: string) {
-  const provided = lead.probability ?? lead.win_probability ?? lead.probability_percent;
-  if (typeof provided === "number") return provided <= 1 ? provided * 100 : provided;
-  if (stage === "Negotiation") return 75;
-  if (stage === "Proposal") return 60;
-  if (stage === "Qualified") return 35;
-  if (stage === "Won") return 100;
-  if (stage === "Lost") return 0;
-  return 20;
-}
-
-function normalizeOpportunity(lead: RawLead, index: number): Opportunity {
-  const stage = normalizeStage(lead.stage ?? lead.status ?? lead.pipeline_stage ?? lead.pipelineStage ?? lead.stage_name ?? "Prospect");
-  const name = lead.name ?? lead.opportunity_name ?? lead.title ?? lead.company_name ?? lead.companyName ?? "Unnamed opportunity";
+function normalizeLead(raw: RawLead): Opportunity {
+  const stageNumber = normalizeStageNumber(raw.stage_number ?? raw.stage ?? raw.status);
 
   return {
-    id: lead.id ?? `${name}-${index}`,
-    name,
-    customer: lead.customer ?? lead.company_name ?? lead.companyName ?? lead.tenant_name ?? lead.name ?? "Unassigned customer",
-    country: normalizeCountry(lead),
-    sector: normalizeSector(lead),
-    stage,
-    value: normalizeValue(lead),
-    probability: normalizeProbability(lead, stage),
-    closeDate: lead.closeDate ?? lead.close_date ?? lead.expected_close_date ?? lead.expectedCloseDate ?? "",
-    owner: ownerValue(lead) || "Account Manager",
+    id: raw.id ?? "",
+    ownerId: raw.owner_id ?? "",
+    countryId: raw.country_id ?? "",
+    regionId: raw.region_id ?? "",
+    sectorId: raw.sector_id ?? "",
+    companyName: raw.company_name ?? "Unnamed opportunity",
+    contactName: raw.contact_name ?? "",
+    contactEmail: raw.contact_email ?? "",
+    contactPhone: raw.contact_phone ?? "",
+    stageNumber,
+    stageName: raw.stage_name ?? STAGE_LABELS[stageNumber] ?? "Unknown",
+    status: raw.status ?? "UNKNOWN",
+    value: numberValue(raw.value_usd ?? raw.value),
+    probability: normalizeProbability(raw.probability),
+    expectedCloseDate: dateInputValue(raw.expected_close_date),
+    source: raw.source ?? "",
+    notes: raw.notes ?? "",
   };
 }
 
-function stageClass(stage: string) {
-  if (stage === "Won") return "bg-green-100 text-green-700";
-  if (stage === "Lost") return "bg-gray-100 text-gray-700";
-  if (stage === "Negotiation") return "bg-teal-100 text-teal-700";
-  if (stage === "Proposal") return "bg-blue-100 text-blue-700";
-  if (stage === "Qualified") return "bg-yellow-100 text-yellow-700";
-  return "bg-purple-100 text-purple-700";
+function normalizeTenant(raw: RawTenant): TenantOption | null {
+  if (!raw.id || !raw.name) return null;
+
+  return {
+    id: raw.id,
+    name: raw.name,
+    countryId: raw.country_id ?? "",
+    regionId: raw.region_id ?? "",
+    sectorId: raw.sector_id ?? "",
+    country: raw.country ?? "Unassigned",
+    sector: raw.sector ?? "Unassigned",
+  };
 }
 
-function nextActionForStage(stage: string) {
-  if (stage === "Negotiation") return "Close plan";
-  if (stage === "Proposal") return "Follow up proposal";
-  if (stage === "Qualified") return "Schedule discovery";
-  if (stage === "Prospect") return "Qualify need";
-  if (stage === "Won") return "Handover";
-  if (stage === "Lost") return "Review loss";
-  return "Update next step";
+function normalizeStageNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(1, Math.min(11, Math.round(value)));
+
+  const normalized = String(value ?? "").replace(/_/g, " ").toLowerCase();
+  if (normalized.includes("won")) return 9;
+  if (normalized.includes("lost")) return 10;
+  if (normalized.includes("dormant")) return 11;
+  if (normalized.includes("contract")) return 8;
+  if (normalized.includes("procurement")) return 7;
+  if (normalized.includes("negotiation")) return 6;
+  if (normalized.includes("proposal")) return 5;
+  if (normalized.includes("solution")) return 4;
+  if (normalized.includes("discovery")) return 3;
+  if (normalized.includes("qualified")) return 2;
+  return 1;
 }
 
-function formatDate(value: string) {
-  if (!value) return "Not set";
+function normalizeProbability(value: unknown) {
+  const number = numberValue(value);
+  return number <= 1 && number > 0 ? number * 100 : number;
+}
+
+function numberValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function dateInputValue(value: string | null | undefined) {
+  if (!value) return "";
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
+function apiDate(value: string) {
+  return value ? new Date(`${value}T00:00:00.000Z`).toISOString() : null;
+}
+
+function displayDate(value: string) {
+  if (!value) return "Not set";
+  const date = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return "Not set";
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function isCurrentMonth(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  const now = new Date();
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+function isOpen(opportunity: Opportunity) {
+  return !CLOSED_STAGES.has(opportunity.stageNumber);
 }
 
-function closePlanPriority(opportunity: Opportunity) {
-  if (opportunity.value >= 400000 || opportunity.probability >= 70 || opportunity.stage === "Negotiation") return "High";
-  return "Medium";
+function weightedValue(opportunity: Opportunity) {
+  return (opportunity.value * opportunity.probability) / 100;
 }
 
-function priorityClass(priority: string) {
-  return priority === "High" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700";
+function stageClass(stage: number) {
+  if (stage === 9) return "bg-green-100 text-green-700";
+  if (stage === 10 || stage === 11) return "bg-gray-100 text-gray-700";
+  if (stage >= 6) return "bg-teal-100 text-teal-700";
+  if (stage >= 4) return "bg-blue-100 text-blue-700";
+  if (stage >= 2) return "bg-yellow-100 text-yellow-700";
+  return "bg-purple-100 text-purple-700";
 }
 
-function recommendedAction(opportunity: Opportunity) {
-  if (opportunity.stage === "Negotiation") return "Prepare closing plan";
-  if (opportunity.stage === "Proposal") return "Send updated proposal";
-  if (opportunity.probability >= 70) return "Schedule decision meeting";
-  return "Confirm budget and timeline";
+function nextActionForStage(stage: number) {
+  if (stage >= 6 && stage <= 8) return "Close plan";
+  if (stage >= 4 && stage <= 5) return "Follow up proposal";
+  if (stage >= 2 && stage <= 3) return "Schedule discovery";
+  if (stage === 9) return "Handover";
+  if (stage === 10) return "Review loss";
+  if (stage === 11) return "Re-engage account";
+  return "Qualify need";
+}
+
+function formFromOpportunity(opportunity: Opportunity): EditForm {
+  return {
+    contactName: opportunity.contactName,
+    contactEmail: opportunity.contactEmail,
+    contactPhone: opportunity.contactPhone,
+    value: String(opportunity.value),
+    probability: String(opportunity.probability),
+    expectedCloseDate: opportunity.expectedCloseDate,
+    source: opportunity.source,
+    notes: opportunity.notes,
+  };
+}
+
+function priorityClass(value: number) {
+  if (value >= 400000) return "bg-red-100 text-red-700";
+  if (value >= 250000) return "bg-yellow-100 text-yellow-700";
+  return "bg-green-100 text-green-700";
 }
 
 export default function AMOpportunitiesPage() {
   const { data: session, status } = useSession();
-  const [leadsData, setLeadsData] = useState<RawLead[]>(mockOpportunities);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [tenants, setTenants] = useState<TenantOption[]>([]);
+  const [ownerId, setOwnerId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createForm, setCreateForm] = useState<OpportunityForm>(emptyOpportunityForm);
+  const [editing, setEditing] = useState<Opportunity | null>(null);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [stageOpportunity, setStageOpportunity] = useState<Opportunity | null>(null);
+  const [stageForm, setStageForm] = useState<StageForm>(emptyStageForm);
 
-  const amName =
-    (session as { user?: { name?: string | null } } | null)?.user?.name ??
-    (session as { name?: string | null } | null)?.name ??
-    "Account Manager";
-  const amId =
-    (session as { user?: { id?: string | null } } | null)?.user?.id ??
-    (session as { id?: string | null } | null)?.id ??
-    "";
+  const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
+
+  async function loadData() {
+    if (!token) {
+      setLoading(false);
+      setError("No API token is available. Please sign in again.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const sessionId = sessionUserId(session);
+      const [leadResponse, tenantResponse, profileResponse] = await Promise.all([
+        fetchJson<unknown>("/api/v1/leads", token),
+        fetchJson<unknown>("/api/v1/tenants", token),
+        sessionId ? Promise.resolve<UserProfile | null>(null) : fetchJson<UserProfile>("/api/v1/me", token),
+      ]);
+      const rawLeads = unwrapList<RawLead>(leadResponse, ["leads", "items"]);
+      const rawTenants = unwrapList<RawTenant>(tenantResponse, ["tenants", "items"]);
+      const profile = profileResponse ? unwrapData<UserProfile>(profileResponse) : null;
+
+      setOpportunities(rawLeads.filter((lead) => Boolean(lead.id)).map(normalizeLead));
+      setTenants(rawTenants.map(normalizeTenant).filter((tenant): tenant is TenantOption => Boolean(tenant)));
+      setOwnerId(sessionId || profile?.id || "");
+    } catch (loadError) {
+      setError(apiErrorMessage(loadError));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (status !== "authenticated") return;
+    void loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, token]);
 
-    let cancelled = false;
-
-    async function loadOpportunities() {
-      const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
-
-      try {
-        const response = await fetchJson<RawLead[] | { leads?: RawLead[]; items?: RawLead[] }>("/api/v1/leads", token);
-        const leads = unwrapList<RawLead>(response, ["leads", "items"]);
-        if (!cancelled) setLeadsData(leads.length ? leads : mockOpportunities);
-      } catch (error) {
-        console.error("AM opportunities fetch failed", error);
-        if (!cancelled) setLeadsData(mockOpportunities);
-      }
-    }
-
-    void loadOpportunities();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [session, status]);
-
-  const rawOpportunities = useMemo(() => scopedLeads(leadsData, amName, amId), [amId, amName, leadsData]);
-  const opportunities = useMemo(() => rawOpportunities.map(normalizeOpportunity), [rawOpportunities]);
   const sortedOpportunities = useMemo(() => [...opportunities].sort((a, b) => b.value - a.value), [opportunities]);
-  const openOpportunities = opportunities.filter((opportunity) => !["Won", "Lost"].includes(opportunity.stage));
+  const openOpportunities = useMemo(() => opportunities.filter(isOpen), [opportunities]);
   const pipelineValue = openOpportunities.reduce((sum, opportunity) => sum + opportunity.value, 0);
-  const weightedForecast = openOpportunities.reduce((sum, opportunity) => sum + (opportunity.value * opportunity.probability) / 100, 0);
-  const averageDealSize = openOpportunities.length > 0 ? pipelineValue / openOpportunities.length : 0;
-  const closingThisMonth = openOpportunities.filter((opportunity) => isCurrentMonth(opportunity.closeDate)).length;
-  const highPriorityDeals = openOpportunities.filter((opportunity) => opportunity.value >= 250000 && opportunity.probability >= 50).length;
-  const stageRows = STAGES.map((stage) => {
-    const rows = opportunities.filter((opportunity) => opportunity.stage === stage);
+  const weightedForecast = openOpportunities.reduce((sum, opportunity) => sum + weightedValue(opportunity), 0);
+  const wonValue = opportunities.filter((opportunity) => opportunity.stageNumber === 9).reduce((sum, opportunity) => sum + opportunity.value, 0);
+  const averageProbability =
+    openOpportunities.length > 0
+      ? openOpportunities.reduce((sum, opportunity) => sum + opportunity.probability, 0) / openOpportunities.length
+      : 0;
+  const closingThisMonth = openOpportunities.filter((opportunity) => isCurrentMonth(opportunity.expectedCloseDate)).length;
+  const selectedTenant = tenants.find((tenant) => tenant.id === createForm.tenantId);
+  const stageRows = BOARD_STAGES.map((stage) => {
+    const rows = opportunities.filter((opportunity) => opportunity.stageNumber === stage);
     return {
       count: rows.length,
       stage,
       value: rows.reduce((sum, opportunity) => sum + opportunity.value, 0),
     };
   });
-  const closePlanRows = sortedOpportunities.filter(
-    (opportunity) => ["Proposal", "Negotiation"].includes(opportunity.stage) || opportunity.value >= 250000,
-  );
+  const closePlanRows = sortedOpportunities.filter((opportunity) => isOpen(opportunity) && (opportunity.value >= 250000 || opportunity.stageNumber >= 5));
   const highestValueDeal = [...openOpportunities].sort((a, b) => b.value - a.value)[0];
   const bestCloseCandidate = [...openOpportunities].sort((a, b) => b.probability - a.probability || b.value - a.value)[0];
-  const dealsNeedingAction = closePlanRows.length;
   const coachRecommendation =
     highestValueDeal && bestCloseCandidate
-      ? `Focus on ${highestValueDeal.name} and ${bestCloseCandidate.name} to improve this month's forecast.`
+      ? `Focus on ${highestValueDeal.companyName} and ${bestCloseCandidate.companyName} to improve this month's forecast.`
       : highestValueDeal
-        ? `Focus on ${highestValueDeal.name} to improve this month's forecast.`
-        : "Keep opportunity stages current and confirm next actions for every open deal.";
+        ? `Focus on ${highestValueDeal.companyName} to improve this month's forecast.`
+        : "Create and update live opportunities to build an accurate personal forecast.";
 
-  if (status === "loading") return <div className="p-8 text-gray-500">Loading...</div>;
+  async function submitCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSuccess("");
+    setError("");
+
+    if (!ownerId) {
+      setError("Your CRM user profile could not be loaded. Please refresh and try again.");
+      return;
+    }
+
+    if (!selectedTenant?.countryId || !selectedTenant.sectorId) {
+      setError("The selected tenant is missing country or sector data, so it cannot be used for a new opportunity.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      await fetchJson<RawLead>("/api/v1/leads", token, {
+        method: "POST",
+        body: JSON.stringify({
+          owner_id: ownerId,
+          country_id: selectedTenant.countryId,
+          region_id: selectedTenant.regionId || undefined,
+          sector_id: selectedTenant.sectorId,
+          company_name: selectedTenant.name,
+          contact_name: createForm.contactName || undefined,
+          contact_email: createForm.contactEmail || undefined,
+          contact_phone: createForm.contactPhone || undefined,
+          stage: Number(createForm.stage),
+          value_usd: Number(createForm.value),
+          probability: Number(createForm.probability),
+          expected_close_date: apiDate(createForm.expectedCloseDate),
+          source: createForm.source || undefined,
+          notes: createForm.notes || undefined,
+        }),
+      });
+      setCreateForm(emptyOpportunityForm);
+      setShowCreateForm(false);
+      setSuccess("Opportunity created successfully.");
+      await loadData();
+    } catch (submitError) {
+      setError(apiErrorMessage(submitError));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing || !editForm) return;
+
+    setSubmitting(true);
+    setSuccess("");
+    setError("");
+
+    try {
+      await fetchJson<RawLead>(`/api/v1/leads/${editing.id}`, token, {
+        method: "PUT",
+        body: JSON.stringify({
+          contact_name: editForm.contactName || undefined,
+          contact_email: editForm.contactEmail || undefined,
+          contact_phone: editForm.contactPhone || undefined,
+          value_usd: Number(editForm.value),
+          probability: Number(editForm.probability),
+          expected_close_date: apiDate(editForm.expectedCloseDate),
+          source: editForm.source || undefined,
+          notes: editForm.notes || undefined,
+        }),
+      });
+      setEditing(null);
+      setEditForm(null);
+      setSuccess("Opportunity updated successfully.");
+      await loadData();
+    } catch (submitError) {
+      setError(apiErrorMessage(submitError));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitStage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!stageOpportunity) return;
+
+    const targetStage = targetStageForAction(stageOpportunity, stageForm.action);
+    if (!targetStage) {
+      setError("This opportunity cannot be advanced further.");
+      return;
+    }
+
+    if ((targetStage === 9 || targetStage === 11) && !stageForm.confirmed) {
+      setError("Please confirm this stage change before continuing.");
+      return;
+    }
+
+    if (targetStage === 10 && (!stageForm.reason.trim() || !stageForm.competitor.trim())) {
+      setError("Lost opportunities require both a reason and competitor.");
+      return;
+    }
+
+    setSubmitting(true);
+    setSuccess("");
+    setError("");
+
+    try {
+      const result = await fetchJson<{ lead?: RawLead; warning?: string }>(`/api/v1/leads/${stageOpportunity.id}/stage`, token, {
+        method: "PATCH",
+        body: JSON.stringify({
+          stage: targetStage,
+          reason: stageForm.reason || undefined,
+          competitor: stageForm.competitor || undefined,
+        }),
+      });
+      setStageOpportunity(null);
+      setStageForm(emptyStageForm);
+      setSuccess(result.warning ? `Stage updated. ${result.warning}` : "Stage updated successfully.");
+      await loadData();
+    } catch (submitError) {
+      setError(apiErrorMessage(submitError));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function startEdit(opportunity: Opportunity) {
+    setEditing(opportunity);
+    setEditForm(formFromOpportunity(opportunity));
+    setStageOpportunity(null);
+    setSuccess("");
+    setError("");
+  }
+
+  function startStage(opportunity: Opportunity) {
+    setStageOpportunity(opportunity);
+    setStageForm(emptyStageForm);
+    setEditing(null);
+    setSuccess("");
+    setError("");
+  }
+
+  if (status === "loading" || loading) return <div className="p-8 text-gray-500">Loading...</div>;
   if (!session) return null;
 
   return (
     <div className="space-y-5">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h1 className="text-xl font-semibold text-gray-800">My Opportunities</h1>
-        <p className="mt-1 text-sm text-gray-500">Manage your sales opportunities, next actions, forecast, and close plans.</p>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-800">My Opportunities</h1>
+            <p className="mt-1 text-sm text-gray-500">Manage live opportunities, forecast, stage changes, and close plans.</p>
+          </div>
+          <button
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0A9599] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#087d80] focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!ownerId || submitting}
+            onClick={() => {
+              setShowCreateForm((current) => !current);
+              setEditing(null);
+              setStageOpportunity(null);
+              setSuccess("");
+              setError("");
+            }}
+            type="button"
+          >
+            <Plus className="h-4 w-4" />
+            New Opportunity
+          </button>
+        </div>
       </div>
+
+      {error && (
+        <Alert tone="error">
+          <span>{error}</span>
+          <button className="font-semibold underline" onClick={() => void loadData()} type="button">
+            Retry
+          </button>
+        </Alert>
+      )}
+
+      {success && <Alert tone="success">{success}</Alert>}
+
+      {showCreateForm && (
+        <FormSection title="Create Opportunity">
+          {!tenants.length && <p className="mb-4 text-sm text-red-600">No assigned tenants are available for opportunity creation.</p>}
+          <form className="grid gap-4 lg:grid-cols-3" onSubmit={submitCreate}>
+            <Label text="Tenant">
+              <select
+                className={inputClassName}
+                onChange={(event) => setCreateForm((current) => ({ ...current, tenantId: event.target.value }))}
+                required
+                value={createForm.tenantId}
+              >
+                <option value="">Select tenant</option>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name} - {tenant.country} - {tenant.sector}
+                  </option>
+                ))}
+              </select>
+            </Label>
+            <Label text="Stage">
+              <select className={inputClassName} onChange={(event) => setCreateForm((current) => ({ ...current, stage: event.target.value }))} value={createForm.stage}>
+                {CREATE_STAGES.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {stage}. {STAGE_LABELS[stage]}
+                  </option>
+                ))}
+              </select>
+            </Label>
+            <Label text="Value USD">
+              <input
+                className={inputClassName}
+                min="0"
+                onChange={(event) => setCreateForm((current) => ({ ...current, value: event.target.value }))}
+                required
+                type="number"
+                value={createForm.value}
+              />
+            </Label>
+            <Label text="Probability %">
+              <input
+                className={inputClassName}
+                max="100"
+                min="0"
+                onChange={(event) => setCreateForm((current) => ({ ...current, probability: event.target.value }))}
+                required
+                type="number"
+                value={createForm.probability}
+              />
+            </Label>
+            <Label text="Expected Close Date">
+              <input
+                className={inputClassName}
+                onChange={(event) => setCreateForm((current) => ({ ...current, expectedCloseDate: event.target.value }))}
+                required
+                type="date"
+                value={createForm.expectedCloseDate}
+              />
+            </Label>
+            <Label text="Source">
+              <input className={inputClassName} onChange={(event) => setCreateForm((current) => ({ ...current, source: event.target.value }))} value={createForm.source} />
+            </Label>
+            <Label text="Contact Name">
+              <input className={inputClassName} onChange={(event) => setCreateForm((current) => ({ ...current, contactName: event.target.value }))} value={createForm.contactName} />
+            </Label>
+            <Label text="Contact Email">
+              <input className={inputClassName} onChange={(event) => setCreateForm((current) => ({ ...current, contactEmail: event.target.value }))} type="email" value={createForm.contactEmail} />
+            </Label>
+            <Label text="Contact Phone">
+              <input className={inputClassName} onChange={(event) => setCreateForm((current) => ({ ...current, contactPhone: event.target.value }))} value={createForm.contactPhone} />
+            </Label>
+            <Label className="lg:col-span-3" text="Notes">
+              <textarea className={inputClassName} onChange={(event) => setCreateForm((current) => ({ ...current, notes: event.target.value }))} rows={3} value={createForm.notes} />
+            </Label>
+            <div className="flex gap-3 lg:col-span-3">
+              <PrimaryButton disabled={submitting || !tenants.length} type="submit">
+                Create Opportunity
+              </PrimaryButton>
+              <SecondaryButton onClick={() => setShowCreateForm(false)} type="button">
+                Cancel
+              </SecondaryButton>
+            </div>
+          </form>
+        </FormSection>
+      )}
+
+      {editing && editForm && (
+        <FormSection title={`Edit ${editing.companyName}`}>
+          <form className="grid gap-4 lg:grid-cols-3" onSubmit={submitEdit}>
+            <Label text="Value USD">
+              <input className={inputClassName} min="0" onChange={(event) => setEditForm({ ...editForm, value: event.target.value })} required type="number" value={editForm.value} />
+            </Label>
+            <Label text="Probability %">
+              <input className={inputClassName} max="100" min="0" onChange={(event) => setEditForm({ ...editForm, probability: event.target.value })} required type="number" value={editForm.probability} />
+            </Label>
+            <Label text="Expected Close Date">
+              <input className={inputClassName} onChange={(event) => setEditForm({ ...editForm, expectedCloseDate: event.target.value })} required type="date" value={editForm.expectedCloseDate} />
+            </Label>
+            <Label text="Source">
+              <input className={inputClassName} onChange={(event) => setEditForm({ ...editForm, source: event.target.value })} value={editForm.source} />
+            </Label>
+            <Label text="Contact Name">
+              <input className={inputClassName} onChange={(event) => setEditForm({ ...editForm, contactName: event.target.value })} value={editForm.contactName} />
+            </Label>
+            <Label text="Contact Email">
+              <input className={inputClassName} onChange={(event) => setEditForm({ ...editForm, contactEmail: event.target.value })} type="email" value={editForm.contactEmail} />
+            </Label>
+            <Label text="Contact Phone">
+              <input className={inputClassName} onChange={(event) => setEditForm({ ...editForm, contactPhone: event.target.value })} value={editForm.contactPhone} />
+            </Label>
+            <Label className="lg:col-span-3" text="Notes">
+              <textarea className={inputClassName} onChange={(event) => setEditForm({ ...editForm, notes: event.target.value })} rows={3} value={editForm.notes} />
+            </Label>
+            <div className="flex gap-3 lg:col-span-3">
+              <PrimaryButton disabled={submitting} type="submit">
+                Save Changes
+              </PrimaryButton>
+              <SecondaryButton onClick={() => setEditing(null)} type="button">
+                Cancel
+              </SecondaryButton>
+            </div>
+          </form>
+        </FormSection>
+      )}
+
+      {stageOpportunity && (
+        <FormSection title={`Change Stage - ${stageOpportunity.companyName}`}>
+          <form className="grid gap-4 lg:grid-cols-3" onSubmit={submitStage}>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 lg:col-span-3">
+              <p className="text-sm text-gray-500">Current stage</p>
+              <p className="mt-1 font-semibold text-gray-900">
+                {stageOpportunity.stageNumber}. {stageOpportunity.stageName}
+              </p>
+            </div>
+            <Label text="Stage action">
+              <select className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, action: event.target.value as StageAction, confirmed: false })} value={stageForm.action}>
+                <option disabled={!nextStage(stageOpportunity)} value="next">
+                  Advance to {nextStage(stageOpportunity) ? STAGE_LABELS[nextStage(stageOpportunity) as number] : "next stage"}
+                </option>
+                <option value="won">Mark Won</option>
+                <option value="lost">Mark Lost</option>
+                <option value="dormant">Mark Dormant</option>
+              </select>
+            </Label>
+            {stageForm.action === "lost" && (
+              <>
+                <Label text="Loss reason">
+                  <input className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, reason: event.target.value })} required value={stageForm.reason} />
+                </Label>
+                <Label text="Competitor">
+                  <input className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, competitor: event.target.value })} required value={stageForm.competitor} />
+                </Label>
+              </>
+            )}
+            {(stageForm.action === "won" || stageForm.action === "dormant" || targetStageForAction(stageOpportunity, stageForm.action) === 9) && (
+              <label className="flex items-center gap-2 text-sm text-gray-700 lg:col-span-3">
+                <input
+                  checked={stageForm.confirmed}
+                  className="h-4 w-4 rounded border-gray-300 text-[#0A9599] focus:ring-[#0A9599]"
+                  onChange={(event) => setStageForm({ ...stageForm, confirmed: event.target.checked })}
+                  type="checkbox"
+                />
+                Confirm this stage change.
+              </label>
+            )}
+            <div className="flex gap-3 lg:col-span-3">
+              <PrimaryButton disabled={submitting} type="submit">
+                Update Stage
+              </PrimaryButton>
+              <SecondaryButton onClick={() => setStageOpportunity(null)} type="button">
+                Cancel
+              </SecondaryButton>
+            </div>
+          </form>
+        </FormSection>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <KpiCard icon={CircleDollarSign} label="My Pipeline" value={formatUSD(pipelineValue)} />
         <KpiCard icon={Target} label="Open Opportunities" value={openOpportunities.length.toString()} />
         <KpiCard icon={TrendingUp} label="Weighted Forecast" value={formatUSD(weightedForecast)} />
-        <KpiCard icon={CircleDollarSign} label="Average Deal Size" value={formatUSD(averageDealSize)} />
+        <KpiCard icon={CheckCircle2} label="Won Value" value={formatUSD(wonValue)} />
         <KpiCard icon={CalendarClock} label="Closing This Month" value={closingThisMonth.toString()} />
-        <KpiCard icon={TrendingUp} label="High Priority Deals" value={highPriorityDeals.toString()} />
+        <KpiCard icon={TrendingUp} label="Avg Probability" value={`${averageProbability.toFixed(1)}%`} />
       </div>
 
       <Section title="Pipeline by Stage">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           {stageRows.map((stage) => (
             <div className="rounded-lg border border-gray-200 bg-white p-4" key={stage.stage}>
-              <Badge className={stageClass(stage.stage)}>{stage.stage}</Badge>
+              <Badge className={stageClass(stage.stage)}>{STAGE_LABELS[stage.stage]}</Badge>
               <p className="mt-4 text-2xl font-semibold text-gray-900">{stage.count}</p>
               <p className="mt-1 text-sm text-gray-500">{formatUSD(stage.value)}</p>
             </div>
@@ -430,26 +851,77 @@ export default function AMOpportunitiesPage() {
         </div>
       </Section>
 
+      <Section title="Opportunity Table">
+        <Table minWidth="1120px">
+          <thead>
+            <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-500">
+              <th className="py-3 pr-4 font-medium">Opportunity</th>
+              <th className="py-3 pr-4 font-medium">Tenant / Company</th>
+              <th className="py-3 pr-4 font-medium">Stage</th>
+              <th className="py-3 pr-4 text-right font-medium">Value</th>
+              <th className="py-3 pr-4 text-right font-medium">Probability</th>
+              <th className="py-3 pr-4 text-right font-medium">Weighted Value</th>
+              <th className="py-3 pr-4 font-medium">Expected Close Date</th>
+              <th className="py-3 pr-4 font-medium">Status</th>
+              <th className="py-3 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedOpportunities.map((opportunity) => (
+              <tr className="border-b last:border-0" key={opportunity.id}>
+                <td className="py-3 pr-4 font-medium text-gray-900">{opportunity.companyName}</td>
+                <td className="py-3 pr-4 text-gray-500">{opportunity.companyName}</td>
+                <td className="py-3 pr-4">
+                  <Badge className={stageClass(opportunity.stageNumber)}>{opportunity.stageName}</Badge>
+                </td>
+                <td className="py-3 pr-4 text-right font-semibold">{formatUSD(opportunity.value)}</td>
+                <td className="py-3 pr-4 text-right">{opportunity.probability.toFixed(1)}%</td>
+                <td className="py-3 pr-4 text-right font-semibold">{formatUSD(weightedValue(opportunity))}</td>
+                <td className="py-3 pr-4 text-gray-500">{displayDate(opportunity.expectedCloseDate)}</td>
+                <td className="py-3 pr-4 text-gray-500">{opportunity.status}</td>
+                <td className="py-3">
+                  <div className="flex flex-wrap gap-2">
+                    <SmallButton onClick={() => startEdit(opportunity)} type="button">
+                      <Edit3 className="h-3.5 w-3.5" />
+                      Edit
+                    </SmallButton>
+                    <SmallButton disabled={!isOpen(opportunity)} onClick={() => startStage(opportunity)} type="button">
+                      Stage
+                    </SmallButton>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!sortedOpportunities.length && (
+              <tr>
+                <td className="py-8 text-sm text-gray-500" colSpan={9}>
+                  No live opportunities found for your account yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
+      </Section>
+
       <Section title="Opportunity Board">
         <div className="grid gap-4 xl:grid-cols-6">
-          {STAGES.map((stage) => {
-            const rows = sortedOpportunities.filter((opportunity) => opportunity.stage === stage);
+          {BOARD_STAGES.map((stage) => {
+            const rows = sortedOpportunities.filter((opportunity) => opportunity.stageNumber === stage);
             return (
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-3" key={stage}>
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <Badge className={stageClass(stage)}>{stage}</Badge>
+                  <Badge className={stageClass(stage)}>{STAGE_LABELS[stage]}</Badge>
                   <span className="text-xs font-semibold text-gray-500">{rows.length}</span>
                 </div>
                 <div className="space-y-3">
                   {rows.map((opportunity) => (
                     <div className="rounded-lg border border-gray-200 bg-white p-3" key={opportunity.id}>
-                      <p className="text-sm font-semibold text-gray-900">{opportunity.name}</p>
-                      <p className="mt-1 text-xs text-gray-500">{opportunity.customer}</p>
+                      <p className="text-sm font-semibold text-gray-900">{opportunity.companyName}</p>
                       <div className="mt-3 space-y-1 text-xs text-gray-600">
                         <p>{formatUSD(opportunity.value)}</p>
-                        <p>{opportunity.probability.toFixed(0)}% probability</p>
-                        <p>{formatDate(opportunity.closeDate)}</p>
-                        <p className="font-medium text-[#0A9599]">{nextActionForStage(opportunity.stage)}</p>
+                        <p>{opportunity.probability.toFixed(1)}% probability</p>
+                        <p>{displayDate(opportunity.expectedCloseDate)}</p>
+                        <p className="font-medium text-[#0A9599]">{nextActionForStage(opportunity.stageNumber)}</p>
                       </div>
                     </div>
                   ))}
@@ -461,49 +933,11 @@ export default function AMOpportunitiesPage() {
         </div>
       </Section>
 
-      <Section title="Opportunity Table">
-        <Table minWidth="1120px">
-          <thead>
-            <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-500">
-              <th className="py-3 pr-4 font-medium">Opportunity</th>
-              <th className="py-3 pr-4 font-medium">Customer</th>
-              <th className="py-3 pr-4 font-medium">Country</th>
-              <th className="py-3 pr-4 font-medium">Sector</th>
-              <th className="py-3 pr-4 font-medium">Stage</th>
-              <th className="py-3 pr-4 text-right font-medium">Value</th>
-              <th className="py-3 pr-4 text-right font-medium">Probability</th>
-              <th className="py-3 pr-4 text-right font-medium">Weighted Value</th>
-              <th className="py-3 pr-4 font-medium">Close Date</th>
-              <th className="py-3 font-medium">Next Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedOpportunities.map((opportunity) => (
-              <tr className="border-b last:border-0" key={opportunity.id}>
-                <td className="py-3 pr-4 font-medium text-gray-900">{opportunity.name}</td>
-                <td className="py-3 pr-4 text-gray-500">{opportunity.customer}</td>
-                <td className="py-3 pr-4 text-gray-500">{opportunity.country}</td>
-                <td className="py-3 pr-4">{opportunity.sector}</td>
-                <td className="py-3 pr-4">
-                  <Badge className={stageClass(opportunity.stage)}>{opportunity.stage}</Badge>
-                </td>
-                <td className="py-3 pr-4 text-right font-semibold">{formatUSD(opportunity.value)}</td>
-                <td className="py-3 pr-4 text-right">{opportunity.probability.toFixed(0)}%</td>
-                <td className="py-3 pr-4 text-right font-semibold">{formatUSD((opportunity.value * opportunity.probability) / 100)}</td>
-                <td className="py-3 pr-4 text-gray-500">{formatDate(opportunity.closeDate)}</td>
-                <td className="py-3">{nextActionForStage(opportunity.stage)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      </Section>
-
       <Section title="Close Plan Priorities">
         <Table minWidth="880px">
           <thead>
             <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-500">
               <th className="py-3 pr-4 font-medium">Opportunity</th>
-              <th className="py-3 pr-4 font-medium">Customer</th>
               <th className="py-3 pr-4 font-medium">Stage</th>
               <th className="py-3 pr-4 text-right font-medium">Value</th>
               <th className="py-3 pr-4 text-right font-medium">Probability</th>
@@ -512,41 +946,101 @@ export default function AMOpportunitiesPage() {
             </tr>
           </thead>
           <tbody>
-            {closePlanRows.map((opportunity) => {
-              const priority = closePlanPriority(opportunity);
-              return (
-                <tr className="border-b last:border-0" key={opportunity.id}>
-                  <td className="py-3 pr-4 font-medium text-gray-900">{opportunity.name}</td>
-                  <td className="py-3 pr-4 text-gray-500">{opportunity.customer}</td>
-                  <td className="py-3 pr-4">
-                    <Badge className={stageClass(opportunity.stage)}>{opportunity.stage}</Badge>
-                  </td>
-                  <td className="py-3 pr-4 text-right font-semibold">{formatUSD(opportunity.value)}</td>
-                  <td className="py-3 pr-4 text-right">{opportunity.probability.toFixed(0)}%</td>
-                  <td className="py-3 pr-4 text-right">
-                    <Badge className={priorityClass(priority)}>{priority}</Badge>
-                  </td>
-                  <td className="py-3">{recommendedAction(opportunity)}</td>
-                </tr>
-              );
-            })}
+            {closePlanRows.map((opportunity) => (
+              <tr className="border-b last:border-0" key={opportunity.id}>
+                <td className="py-3 pr-4 font-medium text-gray-900">{opportunity.companyName}</td>
+                <td className="py-3 pr-4">
+                  <Badge className={stageClass(opportunity.stageNumber)}>{opportunity.stageName}</Badge>
+                </td>
+                <td className="py-3 pr-4 text-right font-semibold">{formatUSD(opportunity.value)}</td>
+                <td className="py-3 pr-4 text-right">{opportunity.probability.toFixed(1)}%</td>
+                <td className="py-3 pr-4 text-right">
+                  <Badge className={priorityClass(opportunity.value)}>{opportunity.value >= 400000 ? "High" : opportunity.value >= 250000 ? "Medium" : "Low"}</Badge>
+                </td>
+                <td className="py-3">{nextActionForStage(opportunity.stageNumber)}</td>
+              </tr>
+            ))}
+            {!closePlanRows.length && (
+              <tr>
+                <td className="py-8 text-sm text-gray-500" colSpan={6}>
+                  No close-plan priorities yet.
+                </td>
+              </tr>
+            )}
           </tbody>
         </Table>
       </Section>
 
       <Card className="border-[#0A9599]/40 bg-[#0A9599]/5 rounded-lg shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-[#0A9599]">Sales Coach</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-5">
-          <CoachMetric label="Highest value deal" value={highestValueDeal ? highestValueDeal.name : "No open deal"} />
-          <CoachMetric label="Best close candidate" value={bestCloseCandidate ? bestCloseCandidate.name : "No candidate"} />
-          <CoachMetric label="Forecast value" value={formatUSD(weightedForecast)} />
-          <CoachMetric label="Deals needing action" value={dealsNeedingAction.toString()} />
-          <div className="rounded-lg border border-[#0A9599]/30 bg-white p-4 text-sm lg:col-span-5">{coachRecommendation}</div>
+        <CardContent className="p-6">
+          <h2 className="text-xl font-semibold text-[#0A9599]">Sales Coach</h2>
+          <div className="mt-5 grid gap-4 lg:grid-cols-5">
+            <CoachMetric label="Highest value deal" value={highestValueDeal ? highestValueDeal.companyName : "No open deal"} />
+            <CoachMetric label="Best close candidate" value={bestCloseCandidate ? bestCloseCandidate.companyName : "No candidate"} />
+            <CoachMetric label="Forecast value" value={formatUSD(weightedForecast)} />
+            <CoachMetric label="Deals needing action" value={closePlanRows.length.toString()} />
+            <div className="rounded-lg border border-[#0A9599]/30 bg-white p-4 text-sm lg:col-span-5">{coachRecommendation}</div>
+          </div>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function isCurrentMonth(value: string) {
+  if (!value) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
+
+function nextStage(opportunity: Opportunity) {
+  if (opportunity.stageNumber >= 8) return null;
+  return opportunity.stageNumber + 1;
+}
+
+function targetStageForAction(opportunity: Opportunity, action: StageAction) {
+  if (action === "won") return 9;
+  if (action === "lost") return 10;
+  if (action === "dormant") return 11;
+  return nextStage(opportunity);
+}
+
+const inputClassName =
+  "mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none transition focus:border-[#0A9599] focus:ring-2 focus:ring-[#0A9599]/20 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400";
+
+function Alert({ children, tone }: { children: ReactNode; tone: "error" | "success" }) {
+  const isError = tone === "error";
+  return (
+    <div
+      className={`flex items-start justify-between gap-3 rounded-lg border p-4 text-sm ${
+        isError ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        {isError ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
+        <div>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Label({ children, className = "", text }: { children: ReactNode; className?: string; text: string }) {
+  return (
+    <label className={`block text-sm font-medium text-gray-700 ${className}`}>
+      {text}
+      {children}
+    </label>
+  );
+}
+
+function FormSection({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
+      <div className="mt-5">{children}</div>
+    </section>
   );
 }
 
@@ -566,6 +1060,43 @@ function Table({ children, minWidth }: { children: ReactNode; minWidth: string }
         {children}
       </table>
     </div>
+  );
+}
+
+function PrimaryButton({ children, disabled, type }: { children: ReactNode; disabled?: boolean; type: "button" | "submit" }) {
+  return (
+    <button
+      className="rounded-lg bg-[#0A9599] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#087d80] focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={disabled}
+      type={type}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SecondaryButton({ children, onClick, type }: { children: ReactNode; onClick: () => void; type: "button" }) {
+  return (
+    <button
+      className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2"
+      onClick={onClick}
+      type={type}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SmallButton({ children, disabled, onClick, type }: { children: ReactNode; disabled?: boolean; onClick: () => void; type: "button" }) {
+  return (
+    <button
+      className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-[#0A9599] hover:text-[#0A9599] focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={disabled}
+      onClick={onClick}
+      type={type}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -594,7 +1125,7 @@ function KpiCard({
           <p className="text-sm text-gray-500">{label}</p>
           <Icon className="h-4 w-4 text-[#0A9599]" />
         </div>
-        <p className="text-2xl font-semibold tracking-normal text-gray-900">{value}</p>
+        <p className="text-xl font-semibold tracking-tight text-gray-900 xl:text-2xl">{value}</p>
       </CardContent>
     </Card>
   );
