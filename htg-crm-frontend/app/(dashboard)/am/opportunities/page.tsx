@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AlertCircle, CalendarClock, CheckCircle2, CircleDollarSign, Edit3, Plus, Target, TrendingUp } from "lucide-react";
 
@@ -389,8 +390,14 @@ function priorityClass(value: number) {
   return "bg-green-100 text-green-700";
 }
 
-export default function AMOpportunitiesPage() {
+function domId(prefix: string, value: string) {
+  return `${prefix}-${value.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function AMOpportunitiesContent() {
   const { data: session, status } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [tenants, setTenants] = useState<TenantOption[]>([]);
   const [ownerId, setOwnerId] = useState("");
@@ -406,6 +413,8 @@ export default function AMOpportunitiesPage() {
   const [stageForm, setStageForm] = useState<StageForm>(emptyStageForm);
 
   const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
+  const selectedOpportunityId = searchParams.get("opportunity") ?? "";
+  const selectedAction = searchParams.get("action") ?? "";
 
   async function loadData() {
     if (!token) {
@@ -453,6 +462,11 @@ export default function AMOpportunitiesPage() {
   }, [status, token]);
 
   const sortedOpportunities = useMemo(() => [...opportunities].sort((a, b) => b.value - a.value), [opportunities]);
+  const selectedOpportunity = useMemo(
+    () => (selectedOpportunityId ? opportunities.find((opportunity) => opportunity.id === selectedOpportunityId) : undefined),
+    [opportunities, selectedOpportunityId],
+  );
+  const selectedOpportunityMissing = Boolean(selectedOpportunityId && !loading && !selectedOpportunity);
   const openOpportunities = useMemo(() => opportunities.filter(isOpen), [opportunities]);
   const pipelineValue = openOpportunities.reduce((sum, opportunity) => sum + opportunity.value, 0);
   const weightedForecast = openOpportunities.reduce((sum, opportunity) => sum + weightedValue(opportunity), 0);
@@ -479,7 +493,27 @@ export default function AMOpportunitiesPage() {
       ? `Focus on ${highestValueDeal.companyName} and ${bestCloseCandidate.companyName} to improve this month's forecast.`
       : highestValueDeal
         ? `Focus on ${highestValueDeal.companyName} to improve this month's forecast.`
-        : "Create and update live opportunities to build an accurate personal forecast.";
+      : "Create and update live opportunities to build an accurate personal forecast.";
+
+  useEffect(() => {
+    if (!selectedOpportunity) return;
+    document.getElementById(domId("am-opportunity", selectedOpportunity.id))?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [selectedOpportunity]);
+
+  function clearOpportunitySelection() {
+    router.push("/am/opportunities");
+  }
+
+  function openStageAction(opportunity: Opportunity, action: StageAction) {
+    setStageOpportunity(opportunity);
+    setStageForm({ ...emptyStageForm, action });
+    setEditing(null);
+    setSuccess("");
+    setError("");
+  }
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -661,6 +695,50 @@ export default function AMOpportunitiesPage() {
       )}
 
       {success && <Alert tone="success">{success}</Alert>}
+
+      {selectedOpportunity && (
+        <div className="rounded-lg border border-[#0A9599]/30 bg-[#0A9599]/5 p-4 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#0A9599]">Selected opportunity</p>
+              <h2 className="mt-1 text-lg font-semibold text-gray-900">{selectedOpportunity.companyName}</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                {formatUSD(selectedOpportunity.value)} · {selectedOpportunity.stageName} · {selectedOpportunity.probability.toFixed(1)}% probability
+              </p>
+              <p className="mt-2 text-sm text-gray-700">
+                {selectedAction === "follow-up" ? "Follow up on this opportunity." : nextActionForStage(selectedOpportunity.stageNumber)}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <SmallButton onClick={() => startEdit(selectedOpportunity)} type="button">
+                <Edit3 className="h-3.5 w-3.5" />
+                Edit
+              </SmallButton>
+              <SmallButton disabled={!isOpen(selectedOpportunity)} onClick={() => openStageAction(selectedOpportunity, "next")} type="button">
+                Advance Stage
+              </SmallButton>
+              <SmallButton onClick={() => openStageAction(selectedOpportunity, "won")} type="button">
+                Mark Won
+              </SmallButton>
+              <SmallButton onClick={() => openStageAction(selectedOpportunity, "lost")} type="button">
+                Mark Lost
+              </SmallButton>
+              <SecondaryButton onClick={clearOpportunitySelection} type="button">
+                Clear selection
+              </SecondaryButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedOpportunityMissing && (
+        <Alert tone="warning">
+          <span>The selected opportunity could not be found in your current opportunity list.</span>
+          <button className="font-semibold underline" onClick={clearOpportunitySelection} type="button">
+            Clear selection
+          </button>
+        </Alert>
+      )}
 
       {showCreateForm && (
         <FormSection title="Create Opportunity">
@@ -875,8 +953,15 @@ export default function AMOpportunitiesPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedOpportunities.map((opportunity) => (
-              <tr className="border-b last:border-0" key={opportunity.id}>
+            {sortedOpportunities.map((opportunity) => {
+              const isSelected = selectedOpportunity?.id === opportunity.id;
+
+              return (
+              <tr
+                className={`scroll-mt-24 border-b transition last:border-0 ${isSelected ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                id={domId("am-opportunity", opportunity.id)}
+                key={opportunity.id}
+              >
                 <td className="py-3 pr-4 font-medium text-gray-900">{opportunity.companyName}</td>
                 <td className="py-3 pr-4 text-gray-500">{opportunity.companyName}</td>
                 <td className="py-3 pr-4">
@@ -899,7 +984,8 @@ export default function AMOpportunitiesPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+            })}
             {!sortedOpportunities.length && (
               <tr>
                 <td className="py-8 text-sm text-gray-500" colSpan={9}>
@@ -922,8 +1008,14 @@ export default function AMOpportunitiesPage() {
                   <span className="text-xs font-semibold text-gray-500">{rows.length}</span>
                 </div>
                 <div className="space-y-3">
-                  {rows.map((opportunity) => (
-                    <div className="rounded-lg border border-gray-200 bg-white p-3" key={opportunity.id}>
+                  {rows.map((opportunity) => {
+                    const isSelected = selectedOpportunity?.id === opportunity.id;
+
+                    return (
+                    <div
+                      className={`rounded-lg border bg-white p-3 transition ${isSelected ? "border-teal-500 bg-teal-50 ring-1 ring-teal-500" : "border-gray-200"}`}
+                      key={opportunity.id}
+                    >
                       <p className="text-sm font-semibold text-gray-900">{opportunity.companyName}</p>
                       <div className="mt-3 space-y-1 text-xs text-gray-600">
                         <p>{formatUSD(opportunity.value)}</p>
@@ -932,7 +1024,8 @@ export default function AMOpportunitiesPage() {
                         <p className="font-medium text-[#0A9599]">{nextActionForStage(opportunity.stageNumber)}</p>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                   {!rows.length && <p className="rounded-lg border border-dashed border-gray-200 p-3 text-xs text-gray-400">No deals</p>}
                 </div>
               </div>
@@ -995,6 +1088,14 @@ export default function AMOpportunitiesPage() {
   );
 }
 
+export default function AMOpportunitiesPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-500">Loading...</div>}>
+      <AMOpportunitiesContent />
+    </Suspense>
+  );
+}
+
 function isCurrentMonth(value: string) {
   if (!value) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -1018,16 +1119,21 @@ function targetStageForAction(opportunity: Opportunity, action: StageAction) {
 const inputClassName =
   "mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none transition focus:border-[#0A9599] focus:ring-2 focus:ring-[#0A9599]/20 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400";
 
-function Alert({ children, tone }: { children: ReactNode; tone: "error" | "success" }) {
+function Alert({ children, tone }: { children: ReactNode; tone: "error" | "success" | "warning" }) {
   const isError = tone === "error";
+  const isWarning = tone === "warning";
   return (
     <div
       className={`flex items-start justify-between gap-3 rounded-lg border p-4 text-sm ${
-        isError ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"
+        isError
+          ? "border-red-200 bg-red-50 text-red-700"
+          : isWarning
+            ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+            : "border-green-200 bg-green-50 text-green-700"
       }`}
     >
       <div className="flex items-start gap-2">
-        {isError ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
+        {isError || isWarning ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
         <div>{children}</div>
       </div>
     </div>

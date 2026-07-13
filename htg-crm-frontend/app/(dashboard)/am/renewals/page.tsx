@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AlertTriangle, CalendarClock, CheckCircle2, HeartPulse, Repeat2, ShieldCheck } from "lucide-react";
 
@@ -249,6 +250,10 @@ function renewalStage(tenant: TenantWithExtras, days: number | null) {
   return "Renewal Scheduled";
 }
 
+function domId(prefix: string, value: string) {
+  return `${prefix}-${value.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
 function KpiCard({ title, value, icon }: { title: string; value: string | number; icon: ReactNode }) {
   return (
     <Card className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -281,8 +286,10 @@ function CoachMetric({ label, value }: { label: string; value: string | number }
   );
 }
 
-export default function AMRenewalsPage() {
+function AMRenewalsContent() {
   const { data: session, status } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [tenantsData, setTenantsData] = useState<TenantWithExtras[]>([]);
 
   const amName =
@@ -293,6 +300,8 @@ export default function AMRenewalsPage() {
     (session as { user?: { id?: string | null } } | null)?.user?.id ??
     (session as { id?: string | null } | null)?.id ??
     "";
+  const selectedTenantId = searchParams.get("tenant") ?? "";
+  const selectedAction = searchParams.get("action") ?? "";
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -331,6 +340,12 @@ export default function AMRenewalsPage() {
         .sort((a, b) => a.days - b.days),
     [myCustomers],
   );
+  const selectedRenewal = useMemo(
+    () => (selectedTenantId ? renewalRows.find((row) => row.tenant.id === selectedTenantId) : undefined),
+    [renewalRows, selectedTenantId],
+  );
+  const selectedTenant = selectedRenewal?.tenant ?? (selectedTenantId ? myCustomers.find((tenant) => tenant.id === selectedTenantId) : undefined);
+  const selectedTenantMissing = Boolean(selectedTenantId && tenantsData.length && !selectedTenant);
 
   const within30 = renewalRows.filter((row) => row.days >= 0 && row.days < 30);
   const within90 = renewalRows.filter((row) => row.days >= 0 && row.days <= 90);
@@ -354,6 +369,18 @@ export default function AMRenewalsPage() {
   const nextRenewal = renewalRows.find((row) => row.days >= 0) ?? renewalRows[0];
   const highestRiskRenewal = [...renewalRows].sort((a, b) => (b.tenant.risk_score ?? 0) - (a.tenant.risk_score ?? 0))[0];
 
+  useEffect(() => {
+    if (!selectedTenant) return;
+    document.getElementById(domId("am-renewal", selectedTenant.id))?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [selectedTenant]);
+
+  function clearRenewalSelection() {
+    router.push("/am/renewals");
+  }
+
   if (status === "loading") return <div className="p-8 text-gray-500">Loading...</div>;
   if (!session) return null;
 
@@ -365,6 +392,42 @@ export default function AMRenewalsPage() {
           Manage upcoming renewals, customer retention plans, and recurring revenue.
         </p>
       </div>
+
+      {selectedTenant && (
+        <div className="rounded-lg border border-[#0A9599]/30 bg-[#0A9599]/5 p-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#0A9599]">Selected renewal</p>
+              <h2 className="mt-1 text-lg font-semibold text-gray-900">{selectedTenant.name}</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                {formatUSD(tenantARR(selectedTenant))} ARR · Renewal {formatDate(tenantRenewalDate(selectedTenant))}
+                {selectedRenewal ? ` · ${selectedRenewal.days} days remaining` : ""}
+              </p>
+              <p className="mt-2 text-sm text-gray-700">
+                {selectedAction === "renewal-review" ? "Review renewal plan and retention priority." : recommendedPlan(selectedTenant, selectedRenewal?.days ?? null)}
+              </p>
+            </div>
+            <button
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:border-[#0A9599]/40 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2"
+              onClick={clearRenewalSelection}
+              type="button"
+            >
+              Clear selection
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedTenantMissing && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>The selected renewal customer could not be found in your current customer list.</span>
+            <button className="font-semibold underline" onClick={clearRenewalSelection} type="button">
+              Clear selection
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <KpiCard title="Renewals Due (30 Days)" value={within30.length} icon={<CalendarClock className="h-5 w-5" />} />
@@ -396,7 +459,11 @@ export default function AMRenewalsPage() {
                 const risk = tenant.risk_score ?? 0;
 
                 return (
-                  <tr key={tenant.id} className="border-b border-gray-100 last:border-0">
+                  <tr
+                    className={`scroll-mt-24 border-b border-gray-100 transition last:border-0 ${selectedTenant?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                    id={domId("am-renewal", tenant.id)}
+                    key={tenant.id}
+                  >
                     <td className="py-4 pr-4 font-semibold text-gray-900">{tenant.name}</td>
                     <td className="py-4 pr-4 text-right font-semibold text-gray-900">{formatUSD(tenantARR(tenant))}</td>
                     <td className="py-4 pr-4 text-gray-600">{formatDate(tenantRenewalDate(tenant))}</td>
@@ -443,7 +510,10 @@ export default function AMRenewalsPage() {
                   const priority = retentionPriority(tenant, days);
 
                   return (
-                    <tr key={tenant.id} className="border-b border-gray-100 last:border-0">
+                    <tr
+                      className={`border-b border-gray-100 transition last:border-0 ${selectedTenant?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                      key={tenant.id}
+                    >
                       <td className="py-4 pr-4 font-semibold text-gray-900">{tenant.name}</td>
                       <td className="py-4 pr-4 text-gray-600">{formatDate(tenantRenewalDate(tenant))}</td>
                       <td className="py-4 pr-4 text-right font-semibold text-gray-900">{formatUSD(tenantARR(tenant))}</td>
@@ -488,7 +558,10 @@ export default function AMRenewalsPage() {
             const risk = tenant.risk_score ?? 0;
 
             return (
-              <div key={tenant.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div
+                className={`rounded-lg border p-4 transition ${selectedTenant?.id === tenant.id ? "border-teal-500 bg-teal-50 ring-1 ring-teal-500" : "border-gray-200 bg-gray-50"}`}
+                key={tenant.id}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold text-gray-900">{tenant.name}</h3>
@@ -527,5 +600,13 @@ export default function AMRenewalsPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+export default function AMRenewalsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-500">Loading...</div>}>
+      <AMRenewalsContent />
+    </Suspense>
   );
 }

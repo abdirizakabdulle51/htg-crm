@@ -109,6 +109,7 @@ type LeadsResponse = LeadRow[] | { leads?: LeadRow[]; items?: LeadRow[] };
 
 type NormalizedOpportunity = {
   id: string;
+  hasStableId: boolean;
   name: string;
   customer: string;
   country: string;
@@ -335,9 +336,11 @@ function opportunityValue(lead: LeadRow) {
 
 function normalizeOpportunity(lead: LeadRow, index: number): NormalizedOpportunity {
   const stage = opportunityStage(lead);
+  const hasStableId = Boolean(lead.id);
 
   return {
     id: lead.id ?? `${lead.name ?? lead.company_name ?? "opportunity"}-${index}`,
+    hasStableId,
     name: lead.name ?? lead.opportunity_name ?? lead.title ?? lead.company_name ?? "Unnamed opportunity",
     customer: lead.company_name ?? lead.companyName ?? lead.customer ?? lead.tenant_name ?? lead.name ?? "Unassigned customer",
     country: lead.country ?? lead.country_name ?? "Unassigned",
@@ -368,6 +371,27 @@ function attentionAction(tenant: TenantWithExtras, days: number | null) {
   if ((tenant.risk_score ?? 0) > 50) return "Schedule retention call";
   if (days !== null && days <= 90) return "Prepare renewal plan";
   return "Customer success review";
+}
+
+function opportunityHref(opportunity: NormalizedOpportunity | undefined, action?: string) {
+  if (!opportunity?.hasStableId) return "/am/opportunities";
+  const params = new URLSearchParams({ opportunity: opportunity.id });
+  if (action) params.set("action", action);
+  return `/am/opportunities?${params.toString()}`;
+}
+
+function customerHref(tenant: TenantWithExtras | undefined, action?: string) {
+  if (!tenant?.id) return "/am/customers";
+  const params = new URLSearchParams({ customer: tenant.id });
+  if (action) params.set("action", action);
+  return `/am/customers?${params.toString()}`;
+}
+
+function renewalHref(tenant: TenantWithExtras | undefined, action?: string) {
+  if (!tenant?.id) return "/am/renewals";
+  const params = new URLSearchParams({ tenant: tenant.id });
+  if (action) params.set("action", action);
+  return `/am/renewals?${params.toString()}`;
 }
 
 export default function AMPage() {
@@ -474,12 +498,12 @@ export default function AMPage() {
       .map((row) => ({
         id: `renewal-${row.tenant.id}`,
         title: `Renewal due: ${row.tenant.name} in ${row.days} days`,
-        href: "/am/renewals",
+        href: renewalHref(row.tenant, "renewal-review"),
       })),
     ...atRiskCustomers.slice(0, 2).map((tenant) => ({
       id: `risk-${tenant.id}`,
       title: `Call ${tenant.name} - risk score ${tenant.risk_score ?? 0}`,
-      href: "/am/customers",
+      href: customerHref(tenant, "review-risk"),
     })),
     ...openOpportunities
       .filter((opportunity) => opportunity.value >= 200000)
@@ -487,7 +511,7 @@ export default function AMPage() {
       .map((opportunity) => ({
         id: `follow-${opportunity.id}`,
         title: `Follow up on ${opportunity.name} worth ${formatUSD(opportunity.value)}`,
-        href: "/am/opportunities",
+        href: opportunityHref(opportunity, "follow-up"),
       })),
     ...openOpportunities
       .filter((opportunity) => ["Proposal", "Negotiation"].includes(opportunity.stage))
@@ -495,7 +519,7 @@ export default function AMPage() {
       .map((opportunity) => ({
         id: `move-${opportunity.id}`,
         title: `Move ${opportunity.name} forward`,
-        href: "/am/opportunities",
+        href: opportunityHref(opportunity),
       })),
     {
       id: "review-customer-follow-ups",
@@ -598,11 +622,11 @@ export default function AMPage() {
                   <tr
                     className="cursor-pointer border-b transition hover:bg-gray-50 focus-within:bg-gray-50 last:border-0"
                     key={opportunity.id}
-                    onClick={() => router.push("/am/opportunities")}
+                    onClick={() => router.push(opportunityHref(opportunity))}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        router.push("/am/opportunities");
+                        router.push(opportunityHref(opportunity));
                       }
                     }}
                     tabIndex={0}
@@ -653,11 +677,11 @@ export default function AMPage() {
                   <tr
                     className="cursor-pointer border-b transition hover:bg-gray-50 focus-within:bg-gray-50 last:border-0"
                     key={tenant.id}
-                    onClick={() => router.push("/am/customers")}
+                    onClick={() => router.push(customerHref(tenant, "review-risk"))}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        router.push("/am/customers");
+                        router.push(customerHref(tenant, "review-risk"));
                       }
                     }}
                     tabIndex={0}
@@ -709,11 +733,11 @@ export default function AMPage() {
                       <tr
                         className="cursor-pointer border-b transition hover:bg-gray-50 focus-within:bg-gray-50 last:border-0"
                         key={tenant.id}
-                        onClick={() => router.push("/am/renewals")}
+                        onClick={() => router.push(renewalHref(tenant, "renewal-review"))}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
-                            router.push("/am/renewals");
+                            router.push(renewalHref(tenant, "renewal-review"));
                           }
                         }}
                         tabIndex={0}
@@ -786,8 +810,8 @@ export default function AMPage() {
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-5">
           <CoachMetric label="Target progress" value={`${achievement.toFixed(1)}%`} />
-          <CoachMetric href="/am/opportunities" label="Highest value opportunity" value={highestValueOpportunity ? highestValueOpportunity.name : "No open opportunity"} />
-          <CoachMetric href="/am/customers" label="Highest risk customer" value={highestRiskCustomer ? `${highestRiskCustomer.name} (${highestRiskCustomer.risk_score ?? 0})` : "No high-risk customer"} />
+          <CoachMetric href={opportunityHref(highestValueOpportunity)} label="Highest value opportunity" value={highestValueOpportunity ? highestValueOpportunity.name : "No open opportunity"} />
+          <CoachMetric href={customerHref(highestRiskCustomer, "review-risk")} label="Highest risk customer" value={highestRiskCustomer ? `${highestRiskCustomer.name} (${highestRiskCustomer.risk_score ?? 0})` : "No high-risk customer"} />
           <CoachMetric label="Next renewal" value={nextRenewal ? `${nextRenewal.tenant.name} (${nextRenewal.days} days)` : "No renewal due"} />
           <div className="rounded-lg border border-[#0A9599]/30 bg-white p-4 text-sm lg:col-span-5">{coachRecommendation}</div>
         </CardContent>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AlertTriangle, CalendarClock, HeartPulse, Search, TrendingUp, Users } from "lucide-react";
 
@@ -254,8 +255,14 @@ function priorityClass(priority: string) {
   return "bg-green-100 text-green-700";
 }
 
-export default function AMCustomersPage() {
+function domId(prefix: string, value: string) {
+  return `${prefix}-${value.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function AMCustomersContent() {
   const { data: session, status } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [tenantsData, setTenantsData] = useState<TenantWithExtras[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -269,6 +276,8 @@ export default function AMCustomersPage() {
     (session as { user?: { id?: string | null } } | null)?.user?.id ??
     (session as { id?: string | null } | null)?.id ??
     "";
+  const selectedCustomerId = searchParams.get("customer") ?? "";
+  const selectedAction = searchParams.get("action") ?? "";
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -299,6 +308,11 @@ export default function AMCustomersPage() {
   }, [session, status]);
 
   const myCustomers = useMemo(() => scopedCustomers(tenantsData, amName, amId), [amId, amName, tenantsData]);
+  const selectedCustomer = useMemo(
+    () => (selectedCustomerId ? myCustomers.find((tenant) => tenant.id === selectedCustomerId) : undefined),
+    [myCustomers, selectedCustomerId],
+  );
+  const selectedCustomerMissing = Boolean(selectedCustomerId && tenantsData.length && !selectedCustomer);
   const sectors = useMemo(() => ["All", ...Array.from(new Set(myCustomers.map(tenantSector))).sort()], [myCustomers]);
   const filteredCustomers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -346,6 +360,18 @@ export default function AMCustomersPage() {
           ? `Start an expansion conversation with ${expansionCandidate.name}.`
           : "Maintain relationship coverage and keep renewal plans current.";
 
+  useEffect(() => {
+    if (!selectedCustomer) return;
+    document.getElementById(domId("am-customer", selectedCustomer.id))?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [selectedCustomer]);
+
+  function clearCustomerSelection() {
+    router.push("/am/customers");
+  }
+
   if (status === "loading") return <div className="p-8 text-gray-500">Loading...</div>;
   if (!session) return null;
 
@@ -355,6 +381,41 @@ export default function AMCustomersPage() {
         <h1 className="text-xl font-semibold text-gray-800">My Customers</h1>
         <p className="mt-1 text-sm text-gray-500">Manage assigned customers, health, renewals, risks, and relationship priorities.</p>
       </div>
+
+      {selectedCustomer && (
+        <div className="rounded-lg border border-[#0A9599]/30 bg-[#0A9599]/5 p-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#0A9599]">Selected customer</p>
+              <h2 className="mt-1 text-lg font-semibold text-gray-900">{selectedCustomer.name}</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Health {tenantHealthScore(selectedCustomer).toFixed(0)} · Risk {selectedCustomer.risk_score ?? 0} · {formatUSD(tenantARR(selectedCustomer))} ARR
+              </p>
+              <p className="mt-2 text-sm text-gray-700">
+                {selectedAction === "review-risk" ? "Review customer risk and relationship priority." : nextAction(selectedCustomer)}
+              </p>
+            </div>
+            <button
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:border-[#0A9599]/40 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2"
+              onClick={clearCustomerSelection}
+              type="button"
+            >
+              Clear selection
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedCustomerMissing && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>The selected customer could not be found in your current customer list.</span>
+            <button className="font-semibold underline" onClick={clearCustomerSelection} type="button">
+              Clear selection
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <KpiCard icon={Users} label="My Customers" value={myCustomers.length.toString()} />
@@ -433,7 +494,11 @@ export default function AMCustomersPage() {
                   const risk = tenant.risk_score ?? 0;
 
                   return (
-                    <tr className="border-b last:border-0" key={tenant.id}>
+                    <tr
+                      className={`scroll-mt-24 border-b transition last:border-0 ${selectedCustomer?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                      id={domId("am-customer", tenant.id)}
+                      key={tenant.id}
+                    >
                       <td className="py-3 pr-4 font-medium text-gray-900">{tenant.name}</td>
                       <td className="py-3 pr-4 text-gray-500">{tenantCountry(tenant) || "Unassigned"}</td>
                       <td className="py-3 pr-4 text-gray-500">{tenantSector(tenant)}</td>
@@ -478,7 +543,10 @@ export default function AMCustomersPage() {
                 </thead>
                 <tbody>
                   {attentionCustomers.map((tenant) => (
-                    <tr className="border-b last:border-0" key={tenant.id}>
+                    <tr
+                      className={`border-b transition last:border-0 ${selectedCustomer?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                      key={tenant.id}
+                    >
                       <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                       <td className="py-3 pr-4 text-gray-500">{attentionReason(tenant)}</td>
                       <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
@@ -515,7 +583,10 @@ export default function AMCustomersPage() {
                     const priority = expansionPriority(arr);
 
                     return (
-                      <tr className="border-b last:border-0" key={tenant.id}>
+                      <tr
+                        className={`border-b transition last:border-0 ${selectedCustomer?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                        key={tenant.id}
+                      >
                         <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                         <td className="py-3 pr-4 text-gray-500">{tenantSector(tenant)}</td>
                         <td className="py-3 pr-4 text-right font-semibold">{formatUSD(arr)}</td>
@@ -551,6 +622,14 @@ export default function AMCustomersPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function AMCustomersPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-500">Loading...</div>}>
+      <AMCustomersContent />
+    </Suspense>
   );
 }
 
