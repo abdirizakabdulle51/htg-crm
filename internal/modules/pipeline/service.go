@@ -37,7 +37,12 @@ func (s *Service) Create(ctx context.Context, user auth.UserContext, req CreateL
 	if err := s.canEditLeadData(ctx, user, req.OwnerID, req.CountryID); err != nil {
 		return nil, err
 	}
-	return s.repository.Create(ctx, req)
+	lead, err := s.repository.Create(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	s.invalidateOverviewCache(ctx, lead)
+	return lead, nil
 }
 
 func (s *Service) List(ctx context.Context, filters LeadFilters, params PaginationParams) ([]*Lead, int, error) {
@@ -56,7 +61,12 @@ func (s *Service) Update(ctx context.Context, user auth.UserContext, id uuid.UUI
 	if err := canEditLead(user, lead); err != nil {
 		return nil, err
 	}
-	return s.repository.Update(ctx, id, req)
+	updated, err := s.repository.Update(ctx, id, req)
+	if err != nil {
+		return nil, err
+	}
+	s.invalidateOverviewCache(ctx, lead, updated)
+	return updated, nil
 }
 
 func (s *Service) AdvanceStage(ctx context.Context, user auth.UserContext, id uuid.UUID, req StageChangeRequest) (*StageChangeResult, error) {
@@ -92,6 +102,7 @@ func (s *Service) AdvanceStage(ctx context.Context, user auth.UserContext, id uu
 		return nil, err
 	}
 	result.Lead = updated
+	s.invalidateOverviewCache(ctx, lead, updated)
 	return result, nil
 }
 
@@ -144,6 +155,23 @@ func (s *Service) Overview(ctx context.Context) (*Overview, error) {
 		}
 	}
 	return overview, nil
+}
+
+func (s *Service) invalidateOverviewCache(ctx context.Context, leads ...*Lead) {
+	if s.redis == nil {
+		return
+	}
+	scopes := map[string]struct{}{"all": {}}
+	for _, lead := range leads {
+		if lead == nil {
+			continue
+		}
+		scopes["user:"+lead.OwnerID.String()] = struct{}{}
+		scopes["country:"+lead.CountryID.String()] = struct{}{}
+	}
+	for scope := range scopes {
+		_ = s.redis.Del(ctx, "htgcrm:pipeline:"+scope+":overview").Err()
+	}
 }
 
 func (s *Service) Forecast(ctx context.Context, months int) (*Forecast, error) {

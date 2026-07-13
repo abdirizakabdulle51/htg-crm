@@ -55,6 +55,16 @@ type LeadApiItem = {
   companyName?: string;
   name?: string;
   country?: string;
+  country_id?: string;
+  countryId?: string;
+  country_name?: string;
+  countryName?: string;
+  stage?: string | number;
+  stage_name?: string;
+  stageName?: string;
+  stage_number?: number;
+  stageNumber?: number;
+  status?: string;
   value_usd?: number;
   valueUsd?: number;
   potential_value_usd?: number;
@@ -74,6 +84,40 @@ function leadValue(lead: LeadApiItem) {
 
 function leadName(lead: LeadApiItem) {
   return lead.company_name ?? lead.companyName ?? lead.name ?? "Strategic opportunity";
+}
+
+function leadCountry(lead: LeadApiItem, countriesByID: Map<string, string>) {
+  return (
+    lead.country ??
+    lead.country_name ??
+    lead.countryName ??
+    (lead.country_id ? countriesByID.get(lead.country_id) : undefined) ??
+    (lead.countryId ? countriesByID.get(lead.countryId) : undefined) ??
+    "Country pending"
+  );
+}
+
+function leadStageNumber(lead: LeadApiItem) {
+  if (typeof lead.stage_number === "number") return lead.stage_number;
+  if (typeof lead.stageNumber === "number") return lead.stageNumber;
+  if (typeof lead.stage === "number") return lead.stage;
+  if (typeof lead.stage === "string") {
+    const parsed = Number.parseInt(lead.stage, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function isOpenLead(lead: LeadApiItem) {
+  const stageNumber = leadStageNumber(lead);
+  if (typeof stageNumber === "number" && [9, 10, 11].includes(stageNumber)) return false;
+
+  const stateText = [lead.stage, lead.stage_name, lead.stageName, lead.status]
+    .filter(Boolean)
+    .join(" ")
+    .toUpperCase();
+
+  return !["WON", "LOST", "DORMANT", "CLOSED"].some((token) => stateText.includes(token));
 }
 
 export function ExecutiveDashboard() {
@@ -144,12 +188,14 @@ export function ExecutiveDashboard() {
   const q3Achieved = (teamHealth?.team ?? []).reduce((sum, member) => sum + (member.achieved_usd ?? 0), 0);
   const keyAccountManagers = buildKeyAccountManagers({ countryTargets, pipeline, tenants });
   const topAccountManager = keyAccountManagers[0] ?? null;
+  const countriesByID = new Map((pipeline?.by_country ?? []).map((country) => [country.country_id, country.country]));
   const strategicOpportunities: StrategicOpportunity[] | null = leads
     ? unwrapLeads(leads)
+        .filter(isOpenLead)
         .map((lead) => ({
           name: leadName(lead),
           value: leadValue(lead),
-          country: lead.country ?? "Country pending",
+          country: leadCountry(lead, countriesByID),
         }))
         .filter((lead) => lead.value > 0)
         .sort((a, b) => b.value - a.value)

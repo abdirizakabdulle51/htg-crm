@@ -244,8 +244,9 @@ func (r *PostgresRepository) CreateContact(ctx context.Context, leadID uuid.UUID
 
 func (r *PostgresRepository) Overview(ctx context.Context) (*Overview, error) {
 	where, args := leadWhere(ctx, LeadFilters{})
+	openWhere := openLeadWhere(where)
 	overview := &Overview{}
-	if err := r.db.QueryRow(ctx, fmt.Sprintf(`SELECT COALESCE(sum(value_usd),0), count(*) FROM leads WHERE %s`, where), args...).Scan(&overview.TotalValueUSD, &overview.TotalCount); err != nil {
+	if err := r.db.QueryRow(ctx, fmt.Sprintf(`SELECT COALESCE(sum(value_usd),0), count(*) FROM leads WHERE %s`, openWhere), args...).Scan(&overview.TotalValueUSD, &overview.TotalCount); err != nil {
 		return nil, err
 	}
 
@@ -266,13 +267,13 @@ func (r *PostgresRepository) Overview(ctx context.Context) (*Overview, error) {
 	}
 	rows.Close()
 
-	if err := r.scanSectors(ctx, overview, where, args); err != nil {
+	if err := r.scanSectors(ctx, overview, openWhere, args); err != nil {
 		return nil, err
 	}
-	if err := r.scanCountries(ctx, overview, where, args); err != nil {
+	if err := r.scanCountries(ctx, overview, openWhere, args); err != nil {
 		return nil, err
 	}
-	if err := r.scanOwners(ctx, overview, where, args); err != nil {
+	if err := r.scanOwners(ctx, overview, openWhere, args); err != nil {
 		return nil, err
 	}
 	if err := r.monthTotals(ctx, overview, where, args); err != nil {
@@ -434,6 +435,10 @@ func leadWhere(ctx context.Context, filters LeadFilters) (string, []any) {
 func qualifyLeadWhere(where string) string {
 	replacer := strings.NewReplacer("owner_id", "l.owner_id", "country_id", "l.country_id", "sector_id", "l.sector_id", "stage_number", "l.stage_number", "value_usd", "l.value_usd", "leads.id", "l.id")
 	return replacer.Replace(where)
+}
+
+func openLeadWhere(where string) string {
+	return where + fmt.Sprintf(" AND stage_number NOT IN (%d, %d, %d)", StageWon, StageLost, StageDormant)
 }
 
 const leadColumns = `id, owner_id, country_id, region_id, sector_id, company_name, COALESCE(contact_name, ''), COALESCE(contact_email, ''), COALESCE(contact_phone, ''), stage::text, stage_number, status::text, value_usd, probability, expected_close_date, COALESCE(source, ''), COALESCE(notes, ''), COALESCE(lost_reason, ''), COALESCE(competitor, ''), won_date, created_at, updated_at`
