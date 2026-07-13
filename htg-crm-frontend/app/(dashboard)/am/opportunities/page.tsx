@@ -223,11 +223,11 @@ async function fetchJson<T>(path: string, token: string, init?: RequestInit): Pr
   return unwrapData<T>(body);
 }
 
-function apiErrorMessage(error: unknown) {
+function apiErrorMessage(error: unknown, notFoundMessage = "The requested resource could not be found.") {
   const apiError = error as Partial<ApiError>;
   if (apiError.status === 401) return "Your session expired or the API rejected the token. Please sign in again.";
   if (apiError.status === 403) return "You do not have permission to manage this opportunity.";
-  if (apiError.status === 404) return "The selected opportunity no longer exists.";
+  if (apiError.status === 404) return notFoundMessage;
   if (apiError.status === 422) return apiError.message ?? "Please check the form fields and try again.";
   return apiError.message ?? "Something went wrong. Please try again.";
 }
@@ -427,10 +427,18 @@ export default function AMOpportunitiesPage() {
       const rawLeads = unwrapList<RawLead>(leadResponse, ["leads", "items"]);
       const rawTenants = unwrapList<RawTenant>(tenantResponse, ["tenants", "items"]);
       const profile = profileResponse ? unwrapData<UserProfile>(profileResponse) : null;
+      const normalizedLeads = rawLeads.filter((lead) => Boolean(lead.id)).map(normalizeLead);
 
-      setOpportunities(rawLeads.filter((lead) => Boolean(lead.id)).map(normalizeLead));
+      setOpportunities(normalizedLeads);
       setTenants(rawTenants.map(normalizeTenant).filter((tenant): tenant is TenantOption => Boolean(tenant)));
       setOwnerId(sessionId || profile?.id || "");
+      if (editing && !normalizedLeads.some((lead) => lead.id === editing.id)) {
+        setEditForm(null);
+        setEditing(null);
+      }
+      if (stageOpportunity && !normalizedLeads.some((lead) => lead.id === stageOpportunity.id)) {
+        setStageOpportunity(null);
+      }
     } catch (loadError) {
       setError(apiErrorMessage(loadError));
     } finally {
@@ -548,7 +556,7 @@ export default function AMOpportunitiesPage() {
       setSuccess("Opportunity updated successfully.");
       await loadData();
     } catch (submitError) {
-      setError(apiErrorMessage(submitError));
+      setError(apiErrorMessage(submitError, "The selected opportunity no longer exists."));
     } finally {
       setSubmitting(false);
     }
@@ -592,7 +600,7 @@ export default function AMOpportunitiesPage() {
       setSuccess(result.warning ? `Stage updated. ${result.warning}` : "Stage updated successfully.");
       await loadData();
     } catch (submitError) {
-      setError(apiErrorMessage(submitError));
+      setError(apiErrorMessage(submitError, "The selected opportunity no longer exists."));
     } finally {
       setSubmitting(false);
     }
