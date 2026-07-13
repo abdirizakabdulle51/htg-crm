@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AlertTriangle, BriefcaseBusiness, CalendarClock, CheckSquare, Target, TrendingUp, Users } from "lucide-react";
 
@@ -114,6 +116,12 @@ type NormalizedOpportunity = {
   value: number;
   probability: number;
   owner: string;
+};
+
+type DashboardAction = {
+  id: string;
+  title: string;
+  href: string;
 };
 
 type TenantWithExtras = Tenant & {
@@ -364,10 +372,14 @@ function attentionAction(tenant: TenantWithExtras, days: number | null) {
 
 export default function AMPage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [tenantsData, setTenantsData] = useState<TenantWithExtras[]>([]);
   const [leadsData, setLeadsData] = useState<LeadRow[]>([]);
   const [leadsFallback, setLeadsFallback] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Temporary UI-only completion until Activities/Tasks persistence is connected.
+  const [completedPriorities, setCompletedPriorities] = useState<Set<string>>(new Set());
+  const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
 
   const amName =
     (session as { user?: { name?: string | null } } | null)?.user?.name ??
@@ -455,22 +467,44 @@ export default function AMPage() {
   const highestRiskCustomer = [...atRiskCustomers].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))[0];
   const nextRenewal = renewalsDue[0];
 
-  const priorities = [
+  const priorities: DashboardAction[] = [
     ...renewalsDue
       .filter((row) => row.days <= 30)
       .slice(0, 2)
-      .map((row) => `Renewal due: ${row.tenant.name} in ${row.days} days`),
-    ...atRiskCustomers.slice(0, 2).map((tenant) => `Call ${tenant.name} - risk score ${tenant.risk_score ?? 0}`),
+      .map((row) => ({
+        id: `renewal-${row.tenant.id}`,
+        title: `Renewal due: ${row.tenant.name} in ${row.days} days`,
+        href: "/am/renewals",
+      })),
+    ...atRiskCustomers.slice(0, 2).map((tenant) => ({
+      id: `risk-${tenant.id}`,
+      title: `Call ${tenant.name} - risk score ${tenant.risk_score ?? 0}`,
+      href: "/am/customers",
+    })),
     ...openOpportunities
       .filter((opportunity) => opportunity.value >= 200000)
       .slice(0, 2)
-      .map((opportunity) => `Follow up on ${opportunity.name} worth ${formatUSD(opportunity.value)}`),
+      .map((opportunity) => ({
+        id: `follow-${opportunity.id}`,
+        title: `Follow up on ${opportunity.name} worth ${formatUSD(opportunity.value)}`,
+        href: "/am/opportunities",
+      })),
     ...openOpportunities
       .filter((opportunity) => ["Proposal", "Negotiation"].includes(opportunity.stage))
       .slice(0, 2)
-      .map((opportunity) => `Move ${opportunity.name} forward`),
-    "Review customer follow-ups before end of day",
+      .map((opportunity) => ({
+        id: `move-${opportunity.id}`,
+        title: `Move ${opportunity.name} forward`,
+        href: "/am/opportunities",
+      })),
+    {
+      id: "review-customer-follow-ups",
+      title: "Review customer follow-ups before end of day",
+      href: "/am/tasks",
+    },
   ].slice(0, 7);
+  const visiblePriorities = priorities.filter((priority) => !completedPriorities.has(priority.id));
+  const visibleTasks = tasks.filter((task) => !completedTasks.has(task.title));
 
   const coachRecommendation =
     highestValueOpportunity && nextRenewal
@@ -493,11 +527,11 @@ export default function AMPage() {
         <KpiCard icon={Users} label="My ARR" value={formatUSD(myARR)} />
         <KpiCard icon={Target} label="My Target" value={formatUSD(MY_TARGET)} />
         <KpiCard icon={TrendingUp} label="Achievement" value={`${achievement.toFixed(1)}%`} />
-        <KpiCard icon={BriefcaseBusiness} label="My Pipeline" value={formatUSD(myPipeline)} />
-        <KpiCard icon={TrendingUp} label="Open Opportunities" value={openOpportunities.length.toString()} />
-        <KpiCard icon={CalendarClock} label="Renewals Due" value={renewalsDue.length.toString()} />
-        <KpiCard icon={CheckSquare} label="Open Tasks" value={tasks.length.toString()} />
-        <KpiCard icon={AlertTriangle} label="At-Risk Customers" value={atRiskCustomers.length.toString()} />
+        <KpiCard href="/am/opportunities" icon={BriefcaseBusiness} label="My Pipeline" value={formatUSD(myPipeline)} />
+        <KpiCard href="/am/opportunities?status=open" icon={TrendingUp} label="Open Opportunities" value={openOpportunities.length.toString()} />
+        <KpiCard href="/am/renewals" icon={CalendarClock} label="Renewals Due" value={renewalsDue.length.toString()} />
+        <KpiCard href="/am/tasks" icon={CheckSquare} label="Open Tasks" value={visibleTasks.length.toString()} />
+        <KpiCard href="/am/customers?filter=at-risk" icon={AlertTriangle} label="At-Risk Customers" value={atRiskCustomers.length.toString()} />
       </div>
 
       <Card className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -507,11 +541,35 @@ export default function AMPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 lg:grid-cols-2">
-            {priorities.map((priority) => (
-              <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4" key={priority}>
-                <input className="mt-1 h-4 w-4 accent-[#0A9599]" disabled type="checkbox" />
-                <span className="text-sm font-medium text-gray-800">{priority}</span>
-              </label>
+            {visiblePriorities.map((priority) => (
+              <div
+                className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-white p-4 transition hover:border-[#0A9599]/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2"
+                key={priority.id}
+                onClick={() => router.push(priority.href)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    router.push(priority.href);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <input
+                  aria-label={`Mark complete: ${priority.title}`}
+                  className="mt-1 h-4 w-4 accent-[#0A9599]"
+                  onChange={() =>
+                    setCompletedPriorities((current) => {
+                      const next = new Set(current);
+                      next.add(priority.id);
+                      return next;
+                    })
+                  }
+                  onClick={(event) => event.stopPropagation()}
+                  type="checkbox"
+                />
+                <span className="text-sm font-medium text-gray-800">{priority.title}</span>
+              </div>
             ))}
           </div>
         </CardContent>
@@ -537,7 +595,18 @@ export default function AMPage() {
               </thead>
               <tbody>
                 {opportunities.map((opportunity) => (
-                  <tr className="border-b last:border-0" key={opportunity.id}>
+                  <tr
+                    className="cursor-pointer border-b transition hover:bg-gray-50 focus-within:bg-gray-50 last:border-0"
+                    key={opportunity.id}
+                    onClick={() => router.push("/am/opportunities")}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        router.push("/am/opportunities");
+                      }
+                    }}
+                    tabIndex={0}
+                  >
                     <td className="py-3 pr-4 font-medium">{opportunity.name}</td>
                     <td className="py-3 pr-4 text-gray-500">
                       {opportunity.customer} / {opportunity.country}
@@ -581,7 +650,18 @@ export default function AMPage() {
               </thead>
               <tbody>
                 {attentionCustomers.map(({ tenant, days, health }) => (
-                  <tr className="border-b last:border-0" key={tenant.id}>
+                  <tr
+                    className="cursor-pointer border-b transition hover:bg-gray-50 focus-within:bg-gray-50 last:border-0"
+                    key={tenant.id}
+                    onClick={() => router.push("/am/customers")}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        router.push("/am/customers");
+                      }
+                    }}
+                    tabIndex={0}
+                  >
                     <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                     <td className="py-3 pr-4 text-gray-500">{tenantCountry(tenant) || "Unassigned"}</td>
                     <td className="py-3 pr-4 text-gray-500">{tenantSector(tenant)}</td>
@@ -626,7 +706,18 @@ export default function AMPage() {
                   {renewalRows.slice(0, 6).map(({ tenant, days }) => {
                     const priority = days < 30 ? "High" : days <= 90 ? "Medium" : "Low";
                     return (
-                      <tr className="border-b last:border-0" key={tenant.id}>
+                      <tr
+                        className="cursor-pointer border-b transition hover:bg-gray-50 focus-within:bg-gray-50 last:border-0"
+                        key={tenant.id}
+                        onClick={() => router.push("/am/renewals")}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            router.push("/am/renewals");
+                          }
+                        }}
+                        tabIndex={0}
+                      >
                         <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                         <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
                         <td className="py-3 pr-4 text-gray-500">{formatDate(tenantRenewalDate(tenant))}</td>
@@ -650,15 +741,39 @@ export default function AMPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {tasks.map((task) => (
-                <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4" key={task.title}>
-                  <input className="mt-1 h-4 w-4 accent-[#0A9599]" disabled type="checkbox" />
+              {visibleTasks.map((task) => (
+                <div
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-white p-4 transition hover:border-[#0A9599]/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2"
+                  key={task.title}
+                  onClick={() => router.push("/am/tasks")}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      router.push("/am/tasks");
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <input
+                    aria-label={`Mark complete: ${task.title}`}
+                    className="mt-1 h-4 w-4 accent-[#0A9599]"
+                    onChange={() =>
+                      setCompletedTasks((current) => {
+                        const next = new Set(current);
+                        next.add(task.title);
+                        return next;
+                      })
+                    }
+                    onClick={(event) => event.stopPropagation()}
+                    type="checkbox"
+                  />
                   <span className="flex-1">
                     <span className="block text-sm font-medium text-gray-800">{task.title}</span>
                     <span className="mt-1 block text-xs text-gray-500">{task.due}</span>
                   </span>
                   <Badge className={priorityClass(task.priority)}>{task.priority}</Badge>
-                </label>
+                </div>
               ))}
             </div>
           </CardContent>
@@ -671,8 +786,8 @@ export default function AMPage() {
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-5">
           <CoachMetric label="Target progress" value={`${achievement.toFixed(1)}%`} />
-          <CoachMetric label="Highest value opportunity" value={highestValueOpportunity ? highestValueOpportunity.name : "No open opportunity"} />
-          <CoachMetric label="Highest risk customer" value={highestRiskCustomer ? `${highestRiskCustomer.name} (${highestRiskCustomer.risk_score ?? 0})` : "No high-risk customer"} />
+          <CoachMetric href="/am/opportunities" label="Highest value opportunity" value={highestValueOpportunity ? highestValueOpportunity.name : "No open opportunity"} />
+          <CoachMetric href="/am/customers" label="Highest risk customer" value={highestRiskCustomer ? `${highestRiskCustomer.name} (${highestRiskCustomer.risk_score ?? 0})` : "No high-risk customer"} />
           <CoachMetric label="Next renewal" value={nextRenewal ? `${nextRenewal.tenant.name} (${nextRenewal.days} days)` : "No renewal due"} />
           <div className="rounded-lg border border-[#0A9599]/30 bg-white p-4 text-sm lg:col-span-5">{coachRecommendation}</div>
         </CardContent>
@@ -681,26 +796,40 @@ export default function AMPage() {
   );
 }
 
-function CoachMetric({ label, value }: { label: string; value: string }) {
-  return (
+function CoachMetric({ href, label, value }: { href?: string; label: string; value: string }) {
+  const content = (
     <div className="rounded-lg border border-[#0A9599]/20 bg-white p-4">
       <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
       <p className="mt-2 text-base font-semibold text-gray-800">{value}</p>
     </div>
   );
+
+  if (!href) return content;
+
+  return (
+    <Link
+      aria-label={`Open ${label}`}
+      className="block rounded-lg transition hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2"
+      href={href}
+    >
+      {content}
+    </Link>
+  );
 }
 
 function KpiCard({
+  href,
   icon: Icon,
   label,
   value,
 }: {
+  href?: string;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
 }) {
-  return (
-    <Card className="bg-white rounded-lg shadow-sm border border-gray-200">
+  const content = (
+    <Card className={`bg-white rounded-lg shadow-sm border border-gray-200 ${href ? "cursor-pointer transition hover:border-[#0A9599]/40 hover:shadow-md" : ""}`}>
       <CardContent className="flex h-32 flex-col justify-between p-5">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-gray-500">{label}</p>
@@ -709,5 +838,17 @@ function KpiCard({
         <p className="text-2xl font-semibold tracking-normal text-gray-900">{value}</p>
       </CardContent>
     </Card>
+  );
+
+  if (!href) return content;
+
+  return (
+    <Link
+      aria-label={`Open ${label}`}
+      className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2"
+      href={href}
+    >
+      {content}
+    </Link>
   );
 }
