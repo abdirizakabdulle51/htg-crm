@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 
@@ -115,6 +116,22 @@ func main() {
 	api.Use(appmiddleware.Pagination())
 
 	usersRepository := usersmodule.NewRepository(postgresPool)
+	appmiddleware.SetUserResolver(func(ctx context.Context, keycloakID uuid.UUID) (auth.UserContext, bool, error) {
+		user, err := usersRepository.FindByKeycloakID(ctx, keycloakID)
+		if err != nil {
+			return auth.UserContext{}, false, err
+		}
+
+		return auth.UserContext{
+			ID:              user.ID,
+			KeycloakSubject: keycloakID,
+			Email:           user.Email,
+			Role:            user.Role,
+			CountryOfficeID: user.CountryOfficeID,
+			Regions:         user.Regions,
+			Sectors:         user.Sectors,
+		}, user.IsActive, nil
+	})
 	keycloakAdmin := usersmodule.NewKeycloakAdminClient(cfg.KeycloakURL, cfg.KeycloakRealm, cfg.KeycloakAdminClientSecret)
 	notificationService := notificationsmodule.NewService(postgresPool, notificationsmodule.Config{
 		SMTPHost:       cfg.SMTPHost,

@@ -46,6 +46,19 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*User, error) 
 	return r.attachAssignments(ctx, user)
 }
 
+func (r *Repository) FindByKeycloakID(ctx context.Context, keycloakID uuid.UUID) (*User, error) {
+	row := r.db.QueryRow(ctx, `
+		SELECT id, keycloak_id, email, full_name, role::text, country_office_id, COALESCE(phone, ''), is_active, created_at, updated_at
+		FROM users
+		WHERE keycloak_id = $1`, keycloakID.String())
+
+	user, err := scanUser(row)
+	if err != nil {
+		return nil, err
+	}
+	return r.attachAssignments(ctx, user)
+}
+
 func (r *Repository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	row := r.db.QueryRow(ctx, `
 		SELECT id, keycloak_id, email, full_name, role::text, country_office_id, COALESCE(phone, ''), is_active, created_at, updated_at

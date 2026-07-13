@@ -19,6 +19,7 @@ type ContextKey struct{}
 
 type UserContext struct {
 	ID              uuid.UUID   `json:"sub"`
+	KeycloakSubject uuid.UUID   `json:"keycloak_subject"`
 	Email           string      `json:"email"`
 	Role            string      `json:"role"`
 	CountryOfficeID uuid.UUID   `json:"country_office_id"`
@@ -137,6 +138,7 @@ func userFromToken(token jwt.Token) (UserContext, error) {
 
 	return UserContext{
 		ID:              userID,
+		KeycloakSubject: userID,
 		Email:           stringClaim(token, "email"),
 		Role:            role,
 		CountryOfficeID: countryOfficeID,

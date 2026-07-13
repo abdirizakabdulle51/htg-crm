@@ -29,12 +29,19 @@ type filterCountryIDKey struct{}
 
 var (
 	keycloakValidator *auth.KeycloakValidator
+	userResolver      UserResolverFunc
 	auditPool         *pgxpool.Pool
 	auditLogger       zerolog.Logger
 )
 
+type UserResolverFunc func(ctx context.Context, keycloakID uuid.UUID) (auth.UserContext, bool, error)
+
 func SetKeycloakValidator(validator *auth.KeycloakValidator) {
 	keycloakValidator = validator
+}
+
+func SetUserResolver(resolver UserResolverFunc) {
+	userResolver = resolver
 }
 
 func SetAuditStore(pool *pgxpool.Pool, logger zerolog.Logger) {
@@ -55,6 +62,29 @@ func AuthMiddleware() gin.HandlerFunc {
 			response.Error(c, http.StatusUnauthorized, response.CodeUnauthorized, "No valid JWT")
 			c.Abort()
 			return
+		}
+
+		if userResolver != nil {
+			keycloakID := userCtx.KeycloakSubject
+			if keycloakID == uuid.Nil {
+				keycloakID = userCtx.ID
+			}
+
+			resolvedUser, active, err := userResolver(c.Request.Context(), keycloakID)
+			if err != nil {
+				response.Error(c, http.StatusUnauthorized, response.CodeUnauthorized, "No valid JWT")
+				c.Abort()
+				return
+			}
+			if !active {
+				response.Error(c, http.StatusForbidden, response.CodeForbidden, "CRM user is inactive")
+				c.Abort()
+				return
+			}
+			if resolvedUser.KeycloakSubject == uuid.Nil {
+				resolvedUser.KeycloakSubject = keycloakID
+			}
+			userCtx = resolvedUser
 		}
 
 		c.Set(auth.UserContextKey, userCtx)
