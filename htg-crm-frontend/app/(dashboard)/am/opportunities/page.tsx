@@ -47,6 +47,8 @@ type ApiError = {
 
 type RawLead = {
   id?: string | null;
+  tenant_id?: string | null;
+  tenantId?: string | null;
   owner_id?: string | null;
   country_id?: string | null;
   region_id?: string | null;
@@ -74,6 +76,7 @@ type RawLead = {
 
 type Opportunity = {
   id: string;
+  tenantId: string;
   ownerId: string;
   countryId: string;
   regionId: string;
@@ -261,6 +264,7 @@ function normalizeLead(raw: RawLead): Opportunity {
 
   return {
     id: raw.id ?? "",
+    tenantId: raw.tenant_id ?? raw.tenantId ?? "",
     ownerId: raw.owner_id ?? "",
     countryId: raw.country_id ?? "",
     regionId: raw.region_id ?? "",
@@ -352,6 +356,16 @@ function weightedValue(opportunity: Opportunity) {
   return (opportunity.value * opportunity.probability) / 100;
 }
 
+function normalizeComparableName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function matchesCustomer(opportunity: Opportunity, tenant: TenantOption) {
+  if (opportunity.tenantId) return opportunity.tenantId === tenant.id;
+  // Leads may not expose tenant_id yet; use exact normalized company name to preserve customer context without loose matching.
+  return normalizeComparableName(opportunity.companyName) === normalizeComparableName(tenant.name);
+}
+
 function stageClass(stage: number) {
   if (stage === 9) return "bg-green-100 text-green-700";
   if (stage === 10 || stage === 11) return "bg-gray-100 text-gray-700";
@@ -414,6 +428,7 @@ function AMOpportunitiesContent() {
 
   const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
   const selectedOpportunityId = searchParams.get("opportunity") ?? "";
+  const selectedCustomerId = searchParams.get("customer") ?? "";
   const selectedAction = searchParams.get("action") ?? "";
 
   async function loadData() {
@@ -461,16 +476,25 @@ function AMOpportunitiesContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, token]);
 
-  const sortedOpportunities = useMemo(() => [...opportunities].sort((a, b) => b.value - a.value), [opportunities]);
+  const selectedCustomer = useMemo(
+    () => (selectedCustomerId ? tenants.find((tenant) => tenant.id === selectedCustomerId) : undefined),
+    [selectedCustomerId, tenants],
+  );
+  const selectedCustomerMissing = Boolean(selectedCustomerId && !loading && !selectedCustomer);
+  const visibleOpportunities = useMemo(
+    () => (selectedCustomer ? opportunities.filter((opportunity) => matchesCustomer(opportunity, selectedCustomer)) : opportunities),
+    [opportunities, selectedCustomer],
+  );
+  const sortedOpportunities = useMemo(() => [...visibleOpportunities].sort((a, b) => b.value - a.value), [visibleOpportunities]);
   const selectedOpportunity = useMemo(
-    () => (selectedOpportunityId ? opportunities.find((opportunity) => opportunity.id === selectedOpportunityId) : undefined),
-    [opportunities, selectedOpportunityId],
+    () => (selectedOpportunityId ? visibleOpportunities.find((opportunity) => opportunity.id === selectedOpportunityId) : undefined),
+    [selectedOpportunityId, visibleOpportunities],
   );
   const selectedOpportunityMissing = Boolean(selectedOpportunityId && !loading && !selectedOpportunity);
-  const openOpportunities = useMemo(() => opportunities.filter(isOpen), [opportunities]);
+  const openOpportunities = useMemo(() => visibleOpportunities.filter(isOpen), [visibleOpportunities]);
   const pipelineValue = openOpportunities.reduce((sum, opportunity) => sum + opportunity.value, 0);
   const weightedForecast = openOpportunities.reduce((sum, opportunity) => sum + weightedValue(opportunity), 0);
-  const wonValue = opportunities.filter((opportunity) => opportunity.stageNumber === 9).reduce((sum, opportunity) => sum + opportunity.value, 0);
+  const wonValue = visibleOpportunities.filter((opportunity) => opportunity.stageNumber === 9).reduce((sum, opportunity) => sum + opportunity.value, 0);
   const averageProbability =
     openOpportunities.length > 0
       ? openOpportunities.reduce((sum, opportunity) => sum + opportunity.probability, 0) / openOpportunities.length
@@ -478,7 +502,7 @@ function AMOpportunitiesContent() {
   const closingThisMonth = openOpportunities.filter((opportunity) => isCurrentMonth(opportunity.expectedCloseDate)).length;
   const selectedTenant = tenants.find((tenant) => tenant.id === createForm.tenantId);
   const stageRows = BOARD_STAGES.map((stage) => {
-    const rows = opportunities.filter((opportunity) => opportunity.stageNumber === stage);
+    const rows = visibleOpportunities.filter((opportunity) => opportunity.stageNumber === stage);
     return {
       count: rows.length,
       stage,
@@ -503,7 +527,19 @@ function AMOpportunitiesContent() {
     });
   }, [selectedOpportunity]);
 
+  useEffect(() => {
+    if (selectedAction !== "create" || !selectedCustomer) return;
+    setShowCreateForm(true);
+    setEditing(null);
+    setStageOpportunity(null);
+    setCreateForm((current) => (current.tenantId === selectedCustomer.id ? current : { ...current, tenantId: selectedCustomer.id }));
+  }, [selectedAction, selectedCustomer]);
+
   function clearOpportunitySelection() {
+    router.push("/am/opportunities");
+  }
+
+  function clearCustomerFilter() {
     router.push("/am/opportunities");
   }
 
@@ -672,6 +708,9 @@ function AMOpportunitiesContent() {
             disabled={!ownerId || submitting}
             onClick={() => {
               setShowCreateForm((current) => !current);
+              if (selectedCustomer) {
+                setCreateForm((current) => ({ ...current, tenantId: selectedCustomer.id }));
+              }
               setEditing(null);
               setStageOpportunity(null);
               setSuccess("");
@@ -695,6 +734,31 @@ function AMOpportunitiesContent() {
       )}
 
       {success && <Alert tone="success">{success}</Alert>}
+
+      {selectedCustomer && (
+        <div className="rounded-lg border border-[#0A9599]/30 bg-[#0A9599]/5 p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#0A9599]">Customer filter</p>
+              <p className="mt-1 text-sm text-gray-700">
+                Viewing: <span className="font-semibold text-gray-900">{selectedCustomer.name}</span>
+              </p>
+            </div>
+            <SecondaryButton onClick={clearCustomerFilter} type="button">
+              Clear Customer Filter
+            </SecondaryButton>
+          </div>
+        </div>
+      )}
+
+      {selectedCustomerMissing && (
+        <Alert tone="warning">
+          <span>Customer not found.</span>
+          <button className="font-semibold underline" onClick={clearCustomerFilter} type="button">
+            Clear Selection
+          </button>
+        </Alert>
+      )}
 
       {selectedOpportunity && (
         <div className="rounded-lg border border-[#0A9599]/30 bg-[#0A9599]/5 p-4 shadow-sm">
@@ -955,10 +1019,11 @@ function AMOpportunitiesContent() {
           <tbody>
             {sortedOpportunities.map((opportunity) => {
               const isSelected = selectedOpportunity?.id === opportunity.id;
+              const isCustomerMatch = Boolean(selectedCustomer && matchesCustomer(opportunity, selectedCustomer));
 
               return (
               <tr
-                className={`scroll-mt-24 border-b transition last:border-0 ${isSelected ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                className={`scroll-mt-24 border-b transition last:border-0 ${isSelected || isCustomerMatch ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
                 id={domId("am-opportunity", opportunity.id)}
                 key={opportunity.id}
               >
@@ -989,7 +1054,7 @@ function AMOpportunitiesContent() {
             {!sortedOpportunities.length && (
               <tr>
                 <td className="py-8 text-sm text-gray-500" colSpan={9}>
-                  No live opportunities found for your account yet.
+                  {selectedCustomer ? "No live opportunities found for this customer yet." : "No live opportunities found for your account yet."}
                 </td>
               </tr>
             )}
@@ -1010,10 +1075,11 @@ function AMOpportunitiesContent() {
                 <div className="space-y-3">
                   {rows.map((opportunity) => {
                     const isSelected = selectedOpportunity?.id === opportunity.id;
+                    const isCustomerMatch = Boolean(selectedCustomer && matchesCustomer(opportunity, selectedCustomer));
 
                     return (
                     <div
-                      className={`rounded-lg border bg-white p-3 transition ${isSelected ? "border-teal-500 bg-teal-50 ring-1 ring-teal-500" : "border-gray-200"}`}
+                      className={`rounded-lg border bg-white p-3 transition ${isSelected || isCustomerMatch ? "border-teal-500 bg-teal-50 ring-1 ring-teal-500" : "border-gray-200"}`}
                       key={opportunity.id}
                     >
                       <p className="text-sm font-semibold text-gray-900">{opportunity.companyName}</p>

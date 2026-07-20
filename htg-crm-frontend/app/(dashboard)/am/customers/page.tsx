@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AlertTriangle, CalendarClock, HeartPulse, Search, TrendingUp, Users } from "lucide-react";
@@ -259,6 +259,28 @@ function domId(prefix: string, value: string) {
   return `${prefix}-${value.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
+function queryHref(path: string, params: Record<string, string>) {
+  const query = new URLSearchParams(params);
+  return `${path}?${query.toString()}`;
+}
+
+function customerContextHref(tenant: TenantWithExtras) {
+  // Some fallback/demo records may lack a persistent tenant ID; keep those rows on the generic page rather than inventing one.
+  return tenant.id ? queryHref("/am/customers", { customer: tenant.id }) : "/am/customers";
+}
+
+function customerOpportunitiesHref(tenant: TenantWithExtras) {
+  return tenant.id ? queryHref("/am/opportunities", { customer: tenant.id }) : "/am/opportunities";
+}
+
+function customerNewOpportunityHref(tenant: TenantWithExtras) {
+  return tenant.id ? queryHref("/am/opportunities", { customer: tenant.id, action: "create" }) : "/am/opportunities";
+}
+
+function customerRenewalsHref(tenant: TenantWithExtras) {
+  return tenant.id ? queryHref("/am/renewals", { tenant: tenant.id }) : "/am/renewals";
+}
+
 function AMCustomersContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -372,6 +394,16 @@ function AMCustomersContent() {
     router.push("/am/customers");
   }
 
+  function selectCustomer(tenant: TenantWithExtras) {
+    router.push(customerContextHref(tenant));
+  }
+
+  function handleCustomerKeyDown(event: KeyboardEvent<HTMLElement>, tenant: TenantWithExtras) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    selectCustomer(tenant);
+  }
+
   if (status === "loading") return <div className="p-8 text-gray-500">Loading...</div>;
   if (!session) return null;
 
@@ -383,11 +415,11 @@ function AMCustomersContent() {
       </div>
 
       {selectedCustomer && (
-        <div className="rounded-lg border border-[#0A9599]/30 bg-[#0A9599]/5 p-4 shadow-sm">
+        <div className="rounded-lg border border-[#0A9599]/40 bg-[#0A9599]/5 p-6 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-[#0A9599]">Selected customer</p>
-              <h2 className="mt-1 text-lg font-semibold text-gray-900">{selectedCustomer.name}</h2>
+              <h2 className="mt-1 text-xl font-semibold text-gray-900">{selectedCustomer.name}</h2>
               <p className="mt-1 text-sm text-gray-600">
                 Health {tenantHealthScore(selectedCustomer).toFixed(0)} · Risk {selectedCustomer.risk_score ?? 0} · {formatUSD(tenantARR(selectedCustomer))} ARR
               </p>
@@ -403,15 +435,48 @@ function AMCustomersContent() {
               Clear selection
             </button>
           </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <CustomerDetail label="Country" value={tenantCountry(selectedCustomer) || "Unassigned"} />
+            <CustomerDetail label="Sector" value={tenantSector(selectedCustomer)} />
+            <CustomerDetail label="ARR" value={formatUSD(tenantARR(selectedCustomer))} />
+            <CustomerDetail label="MRR" value={formatUSD(tenantMRR(selectedCustomer))} />
+            <CustomerDetail label="Health Score" value={`${tenantHealthScore(selectedCustomer).toFixed(0)}%`} />
+            <CustomerDetail label="Risk Score" value={`${selectedCustomer.risk_score ?? 0}`} />
+            <CustomerDetail label="Renewal Date" value={formatDate(tenantRenewalDate(selectedCustomer))} />
+            <CustomerDetail label="Status" value={selectedCustomer.status ?? "UNKNOWN"} />
+          </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-[#0A9599] hover:text-[#0A9599] focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2"
+              onClick={() => router.push(customerOpportunitiesHref(selectedCustomer))}
+              type="button"
+            >
+              Open Opportunities
+            </button>
+            <button
+              className="rounded-lg bg-[#0A9599] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#087d80] focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2"
+              onClick={() => router.push(customerNewOpportunityHref(selectedCustomer))}
+              type="button"
+            >
+              New Opportunity
+            </button>
+            <button
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-[#0A9599] hover:text-[#0A9599] focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2"
+              onClick={() => router.push(customerRenewalsHref(selectedCustomer))}
+              type="button"
+            >
+              View Renewals
+            </button>
+          </div>
         </div>
       )}
 
       {selectedCustomerMissing && (
         <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>The selected customer could not be found in your current customer list.</span>
+            <span>Customer not found.</span>
             <button className="font-semibold underline" onClick={clearCustomerSelection} type="button">
-              Clear selection
+              Clear Selection
             </button>
           </div>
         </div>
@@ -495,9 +560,15 @@ function AMCustomersContent() {
 
                   return (
                     <tr
-                      className={`scroll-mt-24 border-b transition last:border-0 ${selectedCustomer?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                      className={`scroll-mt-24 cursor-pointer border-b transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-inset last:border-0 ${
+                        selectedCustomer?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""
+                      }`}
                       id={domId("am-customer", tenant.id)}
                       key={tenant.id}
+                      onClick={() => selectCustomer(tenant)}
+                      onKeyDown={(event) => handleCustomerKeyDown(event, tenant)}
+                      role="button"
+                      tabIndex={0}
                     >
                       <td className="py-3 pr-4 font-medium text-gray-900">{tenant.name}</td>
                       <td className="py-3 pr-4 text-gray-500">{tenantCountry(tenant) || "Unassigned"}</td>
@@ -544,8 +615,14 @@ function AMCustomersContent() {
                 <tbody>
                   {attentionCustomers.map((tenant) => (
                     <tr
-                      className={`border-b transition last:border-0 ${selectedCustomer?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                      className={`cursor-pointer border-b transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-inset last:border-0 ${
+                        selectedCustomer?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""
+                      }`}
                       key={tenant.id}
+                      onClick={() => selectCustomer(tenant)}
+                      onKeyDown={(event) => handleCustomerKeyDown(event, tenant)}
+                      role="button"
+                      tabIndex={0}
                     >
                       <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                       <td className="py-3 pr-4 text-gray-500">{attentionReason(tenant)}</td>
@@ -584,8 +661,14 @@ function AMCustomersContent() {
 
                     return (
                       <tr
-                        className={`border-b transition last:border-0 ${selectedCustomer?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""}`}
+                        className={`cursor-pointer border-b transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-inset last:border-0 ${
+                          selectedCustomer?.id === tenant.id ? "bg-teal-50 ring-1 ring-inset ring-teal-500" : ""
+                        }`}
                         key={tenant.id}
+                        onClick={() => selectCustomer(tenant)}
+                        onKeyDown={(event) => handleCustomerKeyDown(event, tenant)}
+                        role="button"
+                        tabIndex={0}
                       >
                         <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                         <td className="py-3 pr-4 text-gray-500">{tenantSector(tenant)}</td>
@@ -611,13 +694,22 @@ function AMCustomersContent() {
           <CardTitle className="text-[#0A9599]">Customer Coach</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-5">
-          <CoachMetric label="Best customer" value={bestCustomer ? bestCustomer.name : "No customer"} />
+          <CoachMetric label="Best customer" onClick={bestCustomer ? () => selectCustomer(bestCustomer) : undefined} value={bestCustomer ? bestCustomer.name : "No customer"} />
           <CoachMetric
             label="Highest risk customer"
+            onClick={highestRiskCustomer ? () => selectCustomer(highestRiskCustomer) : undefined}
             value={highestRiskCustomer ? `${highestRiskCustomer.name} (${highestRiskCustomer.risk_score ?? 0})` : "No risk"}
           />
-          <CoachMetric label="Next renewal" value={nextRenewal ? `${nextRenewal.tenant.name} (${nextRenewal.days} days)` : "No renewal due"} />
-          <CoachMetric label="Expansion candidate" value={expansionCandidate ? expansionCandidate.name : "No candidate"} />
+          <CoachMetric
+            label="Next renewal"
+            onClick={nextRenewal ? () => selectCustomer(nextRenewal.tenant) : undefined}
+            value={nextRenewal ? `${nextRenewal.tenant.name} (${nextRenewal.days} days)` : "No renewal due"}
+          />
+          <CoachMetric
+            label="Expansion candidate"
+            onClick={expansionCandidate ? () => selectCustomer(expansionCandidate) : undefined}
+            value={expansionCandidate ? expansionCandidate.name : "No candidate"}
+          />
           <div className="rounded-lg border border-[#0A9599]/30 bg-white p-4 text-sm lg:col-span-5">{coachRecommendation}</div>
         </CardContent>
       </Card>
@@ -633,11 +725,38 @@ export default function AMCustomersPage() {
   );
 }
 
-function CoachMetric({ label, value }: { label: string; value: string }) {
+function CustomerDetail({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-[#0A9599]/20 bg-white p-4">
       <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
       <p className="mt-2 text-base font-semibold text-gray-800">{value}</p>
+    </div>
+  );
+}
+
+function CoachMetric({ label, onClick, value }: { label: string; onClick?: () => void; value: string }) {
+  const content = (
+    <>
+      <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="mt-2 text-base font-semibold text-gray-800">{value}</p>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        className="rounded-lg border border-[#0A9599]/20 bg-white p-4 text-left transition hover:border-[#0A9599] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-offset-2"
+        onClick={onClick}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-[#0A9599]/20 bg-white p-4">
+      {content}
     </div>
   );
 }
