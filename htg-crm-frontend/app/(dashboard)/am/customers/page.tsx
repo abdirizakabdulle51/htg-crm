@@ -30,70 +30,8 @@ type TenantWithExtras = Tenant & {
   tenant_country?: string | null;
   health_score?: number | null;
   healthScore?: number | null;
+  riskScore?: number | null;
 };
-
-const mockTenants: TenantWithExtras[] = [
-  {
-    id: "kenya-tenant-01",
-    name: "Kenya Tenant 01",
-    country: "Kenya",
-    sector: "Telecom",
-    arr_usd: 720000,
-    mrr_usd: 60000,
-    health_score: 91,
-    risk_score: 8,
-    status: "ACTIVE",
-    renewal_date: "2027-06-30",
-  },
-  {
-    id: "kenya-tenant-02",
-    name: "Kenya Tenant 02",
-    country: "Kenya",
-    sector: "Finance",
-    arr_usd: 540000,
-    mrr_usd: 45000,
-    health_score: 89,
-    risk_score: 10,
-    status: "ACTIVE",
-    renewal_date: "2027-03-31",
-  },
-  {
-    id: "kenya-tenant-03",
-    name: "Kenya Tenant 03",
-    country: "Kenya",
-    sector: "Government",
-    arr_usd: 180000,
-    mrr_usd: 15000,
-    health_score: 78,
-    risk_score: 22,
-    status: "ACTIVE",
-    renewal_date: "2026-12-15",
-  },
-  {
-    id: "kenya-tenant-04",
-    name: "Kenya Tenant 04",
-    country: "Kenya",
-    sector: "Healthcare",
-    arr_usd: 150000,
-    mrr_usd: 12500,
-    health_score: 58,
-    risk_score: 58,
-    status: "AT_RISK",
-    renewal_date: "2026-09-30",
-  },
-  {
-    id: "kenya-tenant-05",
-    name: "Kenya Tenant 05",
-    country: "Kenya",
-    sector: "Logistics",
-    arr_usd: 300000,
-    mrr_usd: 25000,
-    health_score: 83,
-    risk_score: 15,
-    status: "ACTIVE",
-    renewal_date: "2027-01-31",
-  },
-];
 
 function unwrapList<T>(value: T[] | { items?: T[]; tenants?: T[] } | null | undefined): T[] {
   if (Array.isArray(value)) return value;
@@ -117,6 +55,10 @@ async function fetchJson<T>(url: string, token: string): Promise<T> {
   }
 
   return body as T;
+}
+
+function apiErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unable to load customers. Please try again.";
 }
 
 function tenantARR(tenant: TenantWithExtras) {
@@ -145,35 +87,16 @@ function tenantHealthScore(tenant: TenantWithExtras) {
   if (tenant.health === "GREEN") return 90;
   if (tenant.health === "YELLOW") return 70;
   if (tenant.health === "RED") return 40;
-  return Math.max(0, 100 - (tenant.risk_score ?? 0));
+  return Math.max(0, 100 - tenantRiskScore(tenant));
 }
 
-function tenantOwnerValue(tenant: TenantWithExtras) {
-  return tenant.account_manager_name ?? tenant.account_manager ?? tenant.owner_name ?? tenant.owner ?? tenant.account_manager_id ?? tenant.owner_id ?? "";
-}
-
-function matchesAM(value: string, amName: string, amId: string) {
-  const normalizedValue = value.trim().toLowerCase();
-  if (!normalizedValue) return false;
-  return normalizedValue === amName.toLowerCase() || Boolean(amId && normalizedValue === amId.toLowerCase());
-}
-
-function assignedTenants(tenants: TenantWithExtras[], amName: string, amId: string) {
-  const hasOwnerData = tenants.some((tenant) => tenantOwnerValue(tenant));
-  if (!hasOwnerData) return [];
-
-  return tenants.filter((tenant) => matchesAM(tenantOwnerValue(tenant), amName, amId));
-}
-
-function scopedCustomers(tenants: TenantWithExtras[], amName: string, amId: string) {
-  const assignedCustomers = assignedTenants(tenants, amName, amId);
-  if (assignedCustomers.length > 0) return assignedCustomers;
-
-  const kenyaCustomers = tenants
-    .filter((tenant) => tenantCountry(tenant).toLowerCase() === "kenya")
-    .slice(0, 5);
-
-  return kenyaCustomers.length > 0 ? kenyaCustomers : tenants.slice(0, 5);
+function tenantRiskScore(tenant: TenantWithExtras) {
+  const score = tenant.risk_score ?? tenant.riskScore;
+  const health = tenant.health_score ?? tenant.healthScore;
+  if (typeof score === "number" && score > 0) return score <= 1 ? score * 100 : score;
+  if (typeof health === "number" && health > 0 && health <= 1) return (1 - health) * 100;
+  if (typeof score === "number") return score;
+  return 0;
 }
 
 function daysUntil(dateValue: string | null) {
@@ -215,7 +138,7 @@ function statusClass(status?: string) {
 function nextAction(tenant: TenantWithExtras) {
   const health = tenantHealthScore(tenant);
   const days = daysUntil(tenantRenewalDate(tenant));
-  const risk = tenant.risk_score ?? 0;
+  const risk = tenantRiskScore(tenant);
 
   if (risk > 50) return "Schedule retention call";
   if (days !== null && days >= 0 && days <= 90) return "Prepare renewal plan";
@@ -226,9 +149,9 @@ function nextAction(tenant: TenantWithExtras) {
 function attentionReason(tenant: TenantWithExtras) {
   const health = tenantHealthScore(tenant);
   const days = daysUntil(tenantRenewalDate(tenant));
-  const risk = tenant.risk_score ?? 0;
+  const risk = tenantRiskScore(tenant);
 
-  if (risk > 50) return `Risk score ${risk}`;
+  if (risk > 50) return `Risk score ${risk.toFixed(0)}`;
   if (days !== null && days >= 0 && days <= 90) return `Renewal in ${days} days`;
   if (health < 70) return `Health score ${health.toFixed(0)}`;
   return "Needs review";
@@ -286,18 +209,12 @@ function AMCustomersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tenantsData, setTenantsData] = useState<TenantWithExtras[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sectorFilter, setSectorFilter] = useState("All");
 
-  const amName =
-    (session as { user?: { name?: string | null } } | null)?.user?.name ??
-    (session as { name?: string | null } | null)?.name ??
-    "Account Manager";
-  const amId =
-    (session as { user?: { id?: string | null } } | null)?.user?.id ??
-    (session as { id?: string | null } | null)?.id ??
-    "";
   const selectedCustomerId = searchParams.get("customer") ?? "";
   const selectedAction = searchParams.get("action") ?? "";
 
@@ -309,16 +226,24 @@ function AMCustomersContent() {
     async function loadCustomers() {
       const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
 
+      setLoadingCustomers(true);
+      setLoadError("");
+
       try {
         const tenantsResponse = await fetchJson<TenantWithExtras[] | { tenants?: TenantWithExtras[]; items?: TenantWithExtras[] }>(
           "/api/v1/tenants",
           token,
         );
         const tenants = unwrapList<TenantWithExtras>(tenantsResponse);
-        if (!cancelled) setTenantsData(tenants.length ? tenants : mockTenants);
+        if (!cancelled) setTenantsData(tenants);
       } catch (error) {
         console.error("AM customers fetch failed", error);
-        if (!cancelled) setTenantsData(mockTenants);
+        if (!cancelled) {
+          setTenantsData([]);
+          setLoadError(apiErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) setLoadingCustomers(false);
       }
     }
 
@@ -329,12 +254,12 @@ function AMCustomersContent() {
     };
   }, [session, status]);
 
-  const myCustomers = useMemo(() => scopedCustomers(tenantsData, amName, amId), [amId, amName, tenantsData]);
+  const myCustomers = tenantsData;
   const selectedCustomer = useMemo(
     () => (selectedCustomerId ? myCustomers.find((tenant) => tenant.id === selectedCustomerId) : undefined),
     [myCustomers, selectedCustomerId],
   );
-  const selectedCustomerMissing = Boolean(selectedCustomerId && tenantsData.length && !selectedCustomer);
+  const selectedCustomerMissing = Boolean(selectedCustomerId && !loadingCustomers && !loadError && !selectedCustomer);
   const sectors = useMemo(() => ["All", ...Array.from(new Set(myCustomers.map(tenantSector))).sort()], [myCustomers]);
   const filteredCustomers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -357,20 +282,20 @@ function AMCustomersContent() {
     myCustomers.length > 0
       ? myCustomers.reduce((sum, tenant) => sum + tenantHealthScore(tenant), 0) / myCustomers.length
       : 0;
-  const atRiskCustomers = myCustomers.filter((tenant) => (tenant.risk_score ?? 0) > 50);
+  const atRiskCustomers = myCustomers.filter((tenant) => tenantRiskScore(tenant) > 50);
   const renewalRows = myCustomers
     .map((tenant) => ({ tenant, days: daysUntil(tenantRenewalDate(tenant)) }))
     .filter((row): row is { tenant: TenantWithExtras; days: number } => row.days !== null && row.days >= 0)
     .sort((a, b) => a.days - b.days);
   const renewalsDue = renewalRows.filter((row) => row.days <= 90);
-  const expansionCustomers = myCustomers.filter((tenant) => tenantHealthScore(tenant) >= 80 && (tenant.risk_score ?? 0) < 20);
+  const expansionCustomers = myCustomers.filter((tenant) => tenantHealthScore(tenant) >= 80 && tenantRiskScore(tenant) < 20);
   const attentionCustomers = myCustomers.filter((tenant) => {
     const health = tenantHealthScore(tenant);
     const days = daysUntil(tenantRenewalDate(tenant));
-    return (tenant.risk_score ?? 0) > 50 || (days !== null && days >= 0 && days <= 90) || health < 70;
+    return tenantRiskScore(tenant) > 50 || (days !== null && days >= 0 && days <= 90) || health < 70;
   });
   const bestCustomer = [...myCustomers].sort((a, b) => tenantHealthScore(b) - tenantHealthScore(a))[0];
-  const highestRiskCustomer = [...myCustomers].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))[0];
+  const highestRiskCustomer = [...myCustomers].sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a))[0];
   const nextRenewal = renewalsDue[0];
   const expansionCandidate = [...expansionCustomers].sort((a, b) => tenantARR(b) - tenantARR(a))[0];
   const coachRecommendation =
@@ -406,6 +331,7 @@ function AMCustomersContent() {
 
   if (status === "loading") return <div className="p-8 text-gray-500">Loading...</div>;
   if (!session) return null;
+  if (loadingCustomers) return <div className="p-8 text-gray-500">Loading...</div>;
 
   return (
     <div className="space-y-5">
@@ -414,6 +340,15 @@ function AMCustomersContent() {
         <p className="mt-1 text-sm text-gray-500">Manage assigned customers, health, renewals, risks, and relationship priorities.</p>
       </div>
 
+      {loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{loadError}</span>
+          </div>
+        </div>
+      )}
+
       {selectedCustomer && (
         <div className="rounded-lg border border-[#0A9599]/40 bg-[#0A9599]/5 p-6 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -421,7 +356,7 @@ function AMCustomersContent() {
               <p className="text-xs font-semibold uppercase tracking-wide text-[#0A9599]">Selected customer</p>
               <h2 className="mt-1 text-xl font-semibold text-gray-900">{selectedCustomer.name}</h2>
               <p className="mt-1 text-sm text-gray-600">
-                Health {tenantHealthScore(selectedCustomer).toFixed(0)} · Risk {selectedCustomer.risk_score ?? 0} · {formatUSD(tenantARR(selectedCustomer))} ARR
+                Health {tenantHealthScore(selectedCustomer).toFixed(0)} · Risk {tenantRiskScore(selectedCustomer).toFixed(0)} · {formatUSD(tenantARR(selectedCustomer))} ARR
               </p>
               <p className="mt-2 text-sm text-gray-700">
                 {selectedAction === "review-risk" ? "Review customer risk and relationship priority." : nextAction(selectedCustomer)}
@@ -441,7 +376,7 @@ function AMCustomersContent() {
             <CustomerDetail label="ARR" value={formatUSD(tenantARR(selectedCustomer))} />
             <CustomerDetail label="MRR" value={formatUSD(tenantMRR(selectedCustomer))} />
             <CustomerDetail label="Health Score" value={`${tenantHealthScore(selectedCustomer).toFixed(0)}%`} />
-            <CustomerDetail label="Risk Score" value={`${selectedCustomer.risk_score ?? 0}`} />
+            <CustomerDetail label="Risk Score" value={`${tenantRiskScore(selectedCustomer).toFixed(0)}%`} />
             <CustomerDetail label="Renewal Date" value={formatDate(tenantRenewalDate(selectedCustomer))} />
             <CustomerDetail label="Status" value={selectedCustomer.status ?? "UNKNOWN"} />
           </div>
@@ -556,7 +491,7 @@ function AMCustomersContent() {
               <tbody>
                 {filteredCustomers.map((tenant) => {
                   const health = tenantHealthScore(tenant);
-                  const risk = tenant.risk_score ?? 0;
+                  const risk = tenantRiskScore(tenant);
 
                   return (
                     <tr
@@ -579,7 +514,7 @@ function AMCustomersContent() {
                         <Badge className={healthClass(health)}>{health.toFixed(0)}</Badge>
                       </td>
                       <td className="py-3 pr-4 text-right">
-                        <Badge className={riskClass(risk)}>{risk}</Badge>
+                        <Badge className={riskClass(risk)}>{risk.toFixed(0)}</Badge>
                       </td>
                       <td className="py-3 pr-4 text-gray-500">{formatDate(tenantRenewalDate(tenant))}</td>
                       <td className="py-3 pr-4 text-right">
@@ -592,7 +527,11 @@ function AMCustomersContent() {
               </tbody>
             </table>
           </div>
-          {!filteredCustomers.length && <p className="py-8 text-sm text-gray-500">No customers match the current filters.</p>}
+          {!filteredCustomers.length && (
+            <p className="py-8 text-sm text-gray-500">
+              {loadError ? "Customer data could not be loaded." : myCustomers.length ? "No customers match the current filters." : "No customers found."}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -698,7 +637,7 @@ function AMCustomersContent() {
           <CoachMetric
             label="Highest risk customer"
             onClick={highestRiskCustomer ? () => selectCustomer(highestRiskCustomer) : undefined}
-            value={highestRiskCustomer ? `${highestRiskCustomer.name} (${highestRiskCustomer.risk_score ?? 0})` : "No risk"}
+            value={highestRiskCustomer ? `${highestRiskCustomer.name} (${tenantRiskScore(highestRiskCustomer).toFixed(0)})` : "No risk"}
           />
           <CoachMetric
             label="Next renewal"
