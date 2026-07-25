@@ -573,7 +573,7 @@ function AMOpportunitiesContent() {
 
   function openStageAction(opportunity: Opportunity, action: StageAction) {
     setStageOpportunity(opportunity);
-    setStageForm({ ...emptyStageForm, action });
+    setStageForm({ ...emptyStageForm, action: isValidStageAction(opportunity, action) ? action : defaultStageAction(opportunity) });
     setEditing(null);
     setSuccess("");
     setError("");
@@ -715,7 +715,7 @@ function AMOpportunitiesContent() {
 
   function startStage(opportunity: Opportunity) {
     setStageOpportunity(opportunity);
-    setStageForm(emptyStageForm);
+    setStageForm({ ...emptyStageForm, action: defaultStageAction(opportunity) });
     setEditing(null);
     setSuccess("");
     setError("");
@@ -808,15 +808,21 @@ function AMOpportunitiesContent() {
                 <Edit3 className="h-3.5 w-3.5" />
                 Edit
               </SmallButton>
-              <SmallButton disabled={!isOpen(selectedOpportunity)} onClick={() => openStageAction(selectedOpportunity, "next")} type="button">
-                Advance Stage
-              </SmallButton>
-              <SmallButton onClick={() => openStageAction(selectedOpportunity, "won")} type="button">
-                Mark Won
-              </SmallButton>
-              <SmallButton onClick={() => openStageAction(selectedOpportunity, "lost")} type="button">
-                Mark Lost
-              </SmallButton>
+              {nextStage(selectedOpportunity) && (
+                <SmallButton onClick={() => openStageAction(selectedOpportunity, "next")} type="button">
+                  Advance Stage
+                </SmallButton>
+              )}
+              {selectedOpportunity.stageNumber === 8 && (
+                <SmallButton onClick={() => openStageAction(selectedOpportunity, "won")} type="button">
+                  Mark Won
+                </SmallButton>
+              )}
+              {isOpen(selectedOpportunity) && (
+                <SmallButton onClick={() => openStageAction(selectedOpportunity, "lost")} type="button">
+                  Mark Lost
+                </SmallButton>
+              )}
               <SecondaryButton onClick={clearOpportunitySelection} type="button">
                 Clear selection
               </SecondaryButton>
@@ -971,17 +977,23 @@ function AMOpportunitiesContent() {
                   {stageOpportunity.stageNumber}. {stageOpportunity.stageName}
                 </p>
               </div>
-              <Label text="Stage action">
-                <select className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, action: event.target.value as StageAction, confirmed: false })} value={stageForm.action}>
-                  <option disabled={!nextStage(stageOpportunity)} value="next">
-                    Advance to {nextStage(stageOpportunity) ? STAGE_LABELS[nextStage(stageOpportunity) as number] : "next stage"}
-                  </option>
-                  <option value="won">Mark Won</option>
-                  <option value="lost">Mark Lost</option>
-                  <option value="dormant">Mark Dormant</option>
-                </select>
-              </Label>
-              {stageForm.action === "lost" && (
+              {isOpen(stageOpportunity) ? (
+                <Label text="Stage action">
+                  <select className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, action: event.target.value as StageAction, confirmed: false })} value={stageForm.action}>
+                    {nextStage(stageOpportunity) && (
+                      <option value="next">
+                        Advance to {STAGE_LABELS[nextStage(stageOpportunity) as number]}
+                      </option>
+                    )}
+                    {stageOpportunity.stageNumber === 8 && <option value="won">Mark Won</option>}
+                    <option value="lost">Mark Lost</option>
+                    <option value="dormant">Mark Dormant</option>
+                  </select>
+                </Label>
+              ) : (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 lg:col-span-3">This deal is closed.</div>
+              )}
+              {isOpen(stageOpportunity) && stageForm.action === "lost" && (
                 <>
                   <Label text="Loss reason">
                     <input className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, reason: event.target.value })} required value={stageForm.reason} />
@@ -991,7 +1003,7 @@ function AMOpportunitiesContent() {
                   </Label>
                 </>
               )}
-              {(stageForm.action === "won" || stageForm.action === "dormant" || targetStageForAction(stageOpportunity, stageForm.action) === 9) && (
+              {isOpen(stageOpportunity) && (stageForm.action === "won" || stageForm.action === "dormant" || targetStageForAction(stageOpportunity, stageForm.action) === 9) && (
                 <label className="flex items-center gap-2 text-sm text-gray-700 lg:col-span-3">
                   <input
                     checked={stageForm.confirmed}
@@ -1003,9 +1015,11 @@ function AMOpportunitiesContent() {
                 </label>
               )}
               <div className="flex gap-3 lg:col-span-3">
-                <PrimaryButton disabled={submitting} type="submit">
-                  Update Stage
-                </PrimaryButton>
+                {isOpen(stageOpportunity) && (
+                  <PrimaryButton disabled={submitting} type="submit">
+                    Update Stage
+                  </PrimaryButton>
+                )}
                 <SecondaryButton onClick={() => setStageOpportunity(null)} type="button">
                   Cancel
                 </SecondaryButton>
@@ -1215,7 +1229,21 @@ function nextStage(opportunity: Opportunity) {
   return opportunity.stageNumber + 1;
 }
 
+function defaultStageAction(opportunity: Opportunity): StageAction {
+  if (nextStage(opportunity)) return "next";
+  if (opportunity.stageNumber === 8) return "won";
+  return "lost";
+}
+
+function isValidStageAction(opportunity: Opportunity, action: StageAction) {
+  if (!isOpen(opportunity)) return false;
+  if (action === "next") return Boolean(nextStage(opportunity));
+  if (action === "won") return opportunity.stageNumber === 8;
+  return action === "lost" || action === "dormant";
+}
+
 function targetStageForAction(opportunity: Opportunity, action: StageAction) {
+  if (!isValidStageAction(opportunity, action)) return null;
   if (action === "won") return 9;
   if (action === "lost") return 10;
   if (action === "dormant") return 11;
