@@ -14,51 +14,21 @@ import type { Tenant } from "@/types/crm";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 const MY_TARGET = 1200000;
 
-const mockOpportunities: LeadRow[] = [
-  {
-    name: "Banking Expansion",
-    company_name: "Kenya Tenant 03",
-    country: "Kenya",
-    stage: "Proposal",
-    value: 450000,
-    probability: 60,
-    owner: "Account Manager",
-  },
-  {
-    name: "Telecom Backup",
-    company_name: "Kenya Tenant 01",
-    country: "Kenya",
-    stage: "Negotiation",
-    value: 280000,
-    probability: 75,
-    owner: "Account Manager",
-  },
-  {
-    name: "Government Cloud",
-    company_name: "Kenya Tenant 05",
-    country: "Kenya",
-    stage: "Qualified",
-    value: 220000,
-    probability: 35,
-    owner: "Account Manager",
-  },
-  {
-    name: "Healthcare DR",
-    company_name: "Kenya Tenant 04",
-    country: "Kenya",
-    stage: "Prospect",
-    value: 200000,
-    probability: 20,
-    owner: "Account Manager",
-  },
-];
+const tasks: Array<{ title: string; due: string; priority: string }> = [];
 
-const tasks = [
-  { title: "Follow up Banking Expansion proposal", due: "Today", priority: "High" },
-  { title: "Schedule renewal call with Kenya Tenant 04", due: "Today", priority: "High" },
-  { title: "Update opportunity stages", due: "Tomorrow", priority: "Medium" },
-  { title: "Send customer health summary", due: "This week", priority: "Medium" },
-];
+const STAGE_LABELS: Record<number, string> = {
+  1: "New Lead",
+  2: "Qualified",
+  3: "Discovery",
+  4: "Solution Fit",
+  5: "Proposal",
+  6: "Negotiation",
+  7: "Procurement",
+  8: "Contracting",
+  9: "Won",
+  10: "Lost",
+  11: "Dormant",
+};
 
 type ApiEnvelope<T> = {
   data: T | null;
@@ -135,70 +105,8 @@ type TenantWithExtras = Tenant & {
   tenant_country?: string | null;
   health_score?: number | null;
   healthScore?: number | null;
+  riskScore?: number | null;
 };
-
-const mockTenants: TenantWithExtras[] = [
-  {
-    id: "kenya-tenant-01",
-    name: "Kenya Tenant 01",
-    country: "Kenya",
-    sector: "Telecom",
-    arr_usd: 720000,
-    mrr_usd: 60000,
-    health_score: 91,
-    risk_score: 8,
-    status: "ACTIVE",
-    renewal_date: "2027-06-30",
-  },
-  {
-    id: "kenya-tenant-02",
-    name: "Kenya Tenant 02",
-    country: "Kenya",
-    sector: "Finance",
-    arr_usd: 540000,
-    mrr_usd: 45000,
-    health_score: 89,
-    risk_score: 10,
-    status: "ACTIVE",
-    renewal_date: "2027-03-31",
-  },
-  {
-    id: "kenya-tenant-03",
-    name: "Kenya Tenant 03",
-    country: "Kenya",
-    sector: "Government",
-    arr_usd: 180000,
-    mrr_usd: 15000,
-    health_score: 78,
-    risk_score: 22,
-    status: "ACTIVE",
-    renewal_date: "2026-12-15",
-  },
-  {
-    id: "kenya-tenant-04",
-    name: "Kenya Tenant 04",
-    country: "Kenya",
-    sector: "Healthcare",
-    arr_usd: 150000,
-    mrr_usd: 12500,
-    health_score: 58,
-    risk_score: 58,
-    status: "AT_RISK",
-    renewal_date: "2026-09-30",
-  },
-  {
-    id: "kenya-tenant-05",
-    name: "Kenya Tenant 05",
-    country: "Kenya",
-    sector: "Logistics",
-    arr_usd: 300000,
-    mrr_usd: 25000,
-    health_score: 83,
-    risk_score: 15,
-    status: "ACTIVE",
-    renewal_date: "2027-01-31",
-  },
-];
 
 function unwrapList<T>(value: T[] | { items?: T[]; tenants?: T[]; leads?: T[] } | null | undefined): T[] {
   if (Array.isArray(value)) return value;
@@ -224,6 +132,10 @@ async function fetchJson<T>(url: string, token: string): Promise<T> {
   return body as T;
 }
 
+function apiErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unable to load dashboard data. Please try again.";
+}
+
 function tenantARR(tenant: TenantWithExtras) {
   return tenant.arr_usd ?? tenant.arrUsd ?? (tenant.monthly_revenue_usd ?? tenant.mrr_usd ?? 0) * 12;
 }
@@ -246,48 +158,16 @@ function tenantHealthScore(tenant: TenantWithExtras) {
   if (tenant.health === "GREEN") return 90;
   if (tenant.health === "YELLOW") return 70;
   if (tenant.health === "RED") return 40;
-  return Math.max(0, 100 - (tenant.risk_score ?? 0));
+  return Math.max(0, 100 - tenantRiskScore(tenant));
 }
 
-function tenantOwnerValue(tenant: TenantWithExtras) {
-  return tenant.account_manager_name ?? tenant.account_manager ?? tenant.owner_name ?? tenant.owner ?? tenant.account_manager_id ?? tenant.owner_id ?? "";
-}
-
-function leadOwnerValue(lead: LeadRow) {
-  return (
-    lead.owner_name ??
-    lead.ownerName ??
-    lead.account_manager_name ??
-    lead.owner ??
-    lead.assigned_to ??
-    lead.assignedTo ??
-    lead.account_manager ??
-    lead.accountManager ??
-    lead.account_manager_id ??
-    lead.owner_id ??
-    ""
-  );
-}
-
-function matchesAM(value: string, amName: string, amId: string) {
-  const normalizedValue = value.trim().toLowerCase();
-  if (!normalizedValue) return false;
-  return normalizedValue === amName.toLowerCase() || Boolean(amId && normalizedValue === amId.toLowerCase());
-}
-
-function assignedTenants(tenants: TenantWithExtras[], amName: string, amId: string) {
-  const hasOwnerData = tenants.some((tenant) => tenantOwnerValue(tenant));
-  if (!hasOwnerData) return [];
-
-  return tenants.filter((tenant) => matchesAM(tenantOwnerValue(tenant), amName, amId));
-}
-
-function scopedOpportunities(leads: LeadRow[], amName: string, amId: string) {
-  const hasOwnerData = leads.some((lead) => leadOwnerValue(lead));
-  if (!hasOwnerData) return leads.slice(0, 6);
-
-  const mine = leads.filter((lead) => matchesAM(leadOwnerValue(lead), amName, amId));
-  return mine.length ? mine : leads.slice(0, 6);
+function tenantRiskScore(tenant: TenantWithExtras) {
+  const score = tenant.risk_score ?? tenant.riskScore;
+  const health = tenant.health_score ?? tenant.healthScore;
+  if (typeof score === "number" && score > 0) return score <= 1 ? score * 100 : score;
+  if (typeof health === "number" && health > 0 && health <= 1) return (1 - health) * 100;
+  if (typeof score === "number") return score;
+  return 0;
 }
 
 function daysUntil(dateValue: string | null) {
@@ -310,9 +190,13 @@ function formatDate(value: string | null) {
 function opportunityStage(lead: LeadRow) {
   const stageText = String(lead.stage_name ?? lead.stage ?? lead.status ?? "").toLowerCase();
   const stageNumber = lead.stage_number ?? (typeof lead.stage === "number" ? lead.stage : undefined);
+  if (stageNumber && STAGE_LABELS[stageNumber]) return STAGE_LABELS[stageNumber];
   if (stageText.includes("won") || stageNumber === 9) return "Won";
   if (stageText.includes("lost") || stageNumber === 10) return "Lost";
-  if (stageText.includes("negotiation") || (stageNumber ?? 0) >= 7) return "Negotiation";
+  if (stageText.includes("dormant") || stageNumber === 11) return "Dormant";
+  if (stageText.includes("contract")) return "Contracting";
+  if (stageText.includes("procurement")) return "Procurement";
+  if (stageText.includes("negotiation")) return "Negotiation";
   if (stageText.includes("proposal") || (stageNumber ?? 0) >= 5) return "Proposal";
   if (stageText.includes("qualified") || (stageNumber ?? 0) >= 3) return "Qualified";
   return "Prospect";
@@ -347,12 +231,12 @@ function normalizeOpportunity(lead: LeadRow, index: number): NormalizedOpportuni
     stage,
     value: opportunityValue(lead),
     probability: opportunityProbability(lead, stage),
-    owner: leadOwnerValue(lead) || "Account Manager",
+    owner: lead.owner_name ?? lead.ownerName ?? lead.account_manager_name ?? lead.owner ?? lead.owner_id ?? "Account Manager",
   };
 }
 
 function nextActionForStage(stage: string) {
-  if (stage === "Negotiation") return "Close plan";
+  if (stage === "Negotiation" || stage === "Procurement" || stage === "Contracting") return "Close plan";
   if (stage === "Proposal") return "Follow up proposal";
   if (stage === "Qualified") return "Schedule discovery";
   if (stage === "Prospect") return "Qualify need";
@@ -368,7 +252,7 @@ function priorityClass(priority: string) {
 }
 
 function attentionAction(tenant: TenantWithExtras, days: number | null) {
-  if ((tenant.risk_score ?? 0) > 50) return "Schedule retention call";
+  if (tenantRiskScore(tenant) > 50) return "Schedule retention call";
   if (days !== null && days <= 90) return "Prepare renewal plan";
   return "Customer success review";
 }
@@ -399,8 +283,8 @@ export default function AMPage() {
   const router = useRouter();
   const [tenantsData, setTenantsData] = useState<TenantWithExtras[]>([]);
   const [leadsData, setLeadsData] = useState<LeadRow[]>([]);
-  const [leadsFallback, setLeadsFallback] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   // Temporary UI-only completion until Activities/Tasks persistence is connected.
   const [completedPriorities, setCompletedPriorities] = useState<Set<string>>(new Set());
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
@@ -409,11 +293,6 @@ export default function AMPage() {
     (session as { user?: { name?: string | null } } | null)?.user?.name ??
     (session as { name?: string | null } | null)?.name ??
     "Account Manager";
-  const amId =
-    (session as { user?: { id?: string | null } } | null)?.user?.id ??
-    (session as { id?: string | null } | null)?.id ??
-    "";
-
   useEffect(() => {
     if (status !== "authenticated") return;
 
@@ -421,32 +300,25 @@ export default function AMPage() {
 
     async function loadAMData() {
       setLoading(true);
+      setLoadError("");
       const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
 
       try {
-        const [tenantsResponse, leadsResponse] = await Promise.allSettled([
+        const [tenantsResponse, leadsResponse] = await Promise.all([
           fetchJson<TenantWithExtras[] | { tenants?: TenantWithExtras[]; items?: TenantWithExtras[] }>("/api/v1/tenants", token),
           fetchJson<LeadsResponse>("/api/v1/leads", token),
         ]);
 
         if (cancelled) return;
 
-        if (tenantsResponse.status === "fulfilled") {
-          const tenants = unwrapList<TenantWithExtras>(tenantsResponse.value);
-          setTenantsData(tenants.length ? tenants : mockTenants);
-        } else {
-          console.error("AM tenants fetch failed", tenantsResponse.reason);
-          setTenantsData(mockTenants);
-        }
-
-        if (leadsResponse.status === "fulfilled") {
-          const leads = unwrapList<LeadRow>(leadsResponse.value);
-          setLeadsData(leads.length ? leads : mockOpportunities);
-          setLeadsFallback(leads.length === 0);
-        } else {
-          console.error("AM leads fetch failed", leadsResponse.reason);
-          setLeadsData(mockOpportunities);
-          setLeadsFallback(true);
+        setTenantsData(unwrapList<TenantWithExtras>(tenantsResponse));
+        setLeadsData(unwrapList<LeadRow>(leadsResponse));
+      } catch (error) {
+        console.error("AM dashboard fetch failed", error);
+        if (!cancelled) {
+          setTenantsData([]);
+          setLeadsData([]);
+          setLoadError(apiErrorMessage(error));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -460,24 +332,15 @@ export default function AMPage() {
     };
   }, [session, status]);
 
-  const assignedCustomers = useMemo(() => assignedTenants(tenantsData, amName, amId), [amId, amName, tenantsData]);
-  const myCustomers = useMemo(() => {
-    if (assignedCustomers.length > 0) return assignedCustomers;
-
-    const kenyaCustomers = tenantsData
-      .filter((tenant) => tenantCountry(tenant).toLowerCase() === "kenya")
-      .slice(0, 5);
-
-    return kenyaCustomers.length > 0 ? kenyaCustomers : tenantsData.slice(0, 5);
-  }, [assignedCustomers, tenantsData]);
-  const rawOpportunities = useMemo(() => scopedOpportunities(leadsData, amName, amId), [amId, amName, leadsData]);
+  const myCustomers = tenantsData;
+  const rawOpportunities = leadsData;
   const opportunities = useMemo(() => rawOpportunities.map(normalizeOpportunity), [rawOpportunities]);
 
   const myARR = myCustomers.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
   const achievement = MY_TARGET > 0 ? (myARR / MY_TARGET) * 100 : 0;
-  const openOpportunities = opportunities.filter((opportunity) => !["Won", "Lost"].includes(opportunity.stage));
+  const openOpportunities = opportunities.filter((opportunity) => !["Won", "Lost", "Dormant"].includes(opportunity.stage));
   const myPipeline = openOpportunities.reduce((sum, opportunity) => sum + opportunity.value, 0);
-  const atRiskCustomers = myCustomers.filter((tenant) => (tenant.risk_score ?? 0) > 50);
+  const atRiskCustomers = myCustomers.filter((tenant) => tenantRiskScore(tenant) > 50);
   const renewalRows = myCustomers
     .map((tenant) => ({ tenant, days: daysUntil(tenantRenewalDate(tenant)) }))
     .filter((row): row is { tenant: TenantWithExtras; days: number } => row.days !== null && row.days >= 0)
@@ -485,10 +348,10 @@ export default function AMPage() {
   const renewalsDue = renewalRows.filter((row) => row.days <= 90);
   const attentionCustomers = myCustomers
     .map((tenant) => ({ tenant, days: daysUntil(tenantRenewalDate(tenant)), health: tenantHealthScore(tenant) }))
-    .filter((row) => (row.tenant.risk_score ?? 0) > 50 || (row.days !== null && row.days <= 90 && row.days >= 0) || row.health < 70)
-    .sort((a, b) => (b.tenant.risk_score ?? 0) - (a.tenant.risk_score ?? 0));
+    .filter((row) => tenantRiskScore(row.tenant) > 50 || (row.days !== null && row.days <= 90 && row.days >= 0) || row.health < 70)
+    .sort((a, b) => tenantRiskScore(b.tenant) - tenantRiskScore(a.tenant));
   const highestValueOpportunity = [...openOpportunities].sort((a, b) => b.value - a.value)[0];
-  const highestRiskCustomer = [...atRiskCustomers].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))[0];
+  const highestRiskCustomer = [...atRiskCustomers].sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a))[0];
   const nextRenewal = renewalsDue[0];
 
   const priorities: DashboardAction[] = [
@@ -502,7 +365,7 @@ export default function AMPage() {
       })),
     ...atRiskCustomers.slice(0, 2).map((tenant) => ({
       id: `risk-${tenant.id}`,
-      title: `Call ${tenant.name} - risk score ${tenant.risk_score ?? 0}`,
+      title: `Call ${tenant.name} - risk score ${tenantRiskScore(tenant).toFixed(0)}`,
       href: customerHref(tenant, "review-risk"),
     })),
     ...openOpportunities
@@ -521,11 +384,6 @@ export default function AMPage() {
         title: `Move ${opportunity.name} forward`,
         href: opportunityHref(opportunity),
       })),
-    {
-      id: "review-customer-follow-ups",
-      title: "Review customer follow-ups before end of day",
-      href: "/am/tasks",
-    },
   ].slice(0, 7);
   const visiblePriorities = priorities.filter((priority) => !completedPriorities.has(priority.id));
   const visibleTasks = tasks.filter((task) => !completedTasks.has(task.title));
@@ -561,9 +419,17 @@ export default function AMPage() {
       <Card className="bg-white rounded-lg shadow-sm border border-gray-200">
         <CardHeader>
           <CardTitle>Today&apos;s Priorities</CardTitle>
-          <p className="text-sm text-gray-500">Execution list for {amName}. {leadsFallback ? "Opportunity fallback data is active." : ""}</p>
+          <p className="text-sm text-gray-500">Execution list for {amName}.</p>
         </CardHeader>
         <CardContent>
+          {loadError && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{loadError}</span>
+              </div>
+            </div>
+          )}
           <div className="grid gap-3 lg:grid-cols-2">
             {visiblePriorities.map((priority) => (
               <div
@@ -596,6 +462,7 @@ export default function AMPage() {
               </div>
             ))}
           </div>
+          {!visiblePriorities.length && <p className="py-6 text-sm text-gray-500">{loadError ? "Dashboard data could not be loaded." : "No live priorities right now."}</p>}
         </CardContent>
       </Card>
 
@@ -692,8 +559,8 @@ export default function AMPage() {
                     <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
                     <td className="py-3 pr-4 text-right">{health.toFixed(0)}</td>
                     <td className="py-3 pr-4 text-right">
-                      <Badge className={(tenant.risk_score ?? 0) > 50 ? "bg-red-500 text-white" : "bg-amber-500 text-white"}>
-                        {tenant.risk_score ?? 0}
+                      <Badge className={tenantRiskScore(tenant) > 50 ? "bg-red-500 text-white" : "bg-amber-500 text-white"}>
+                        {tenantRiskScore(tenant).toFixed(0)}
                       </Badge>
                     </td>
                     <td className="py-3 pr-4 text-gray-500">{formatDate(tenantRenewalDate(tenant))}</td>
@@ -800,6 +667,7 @@ export default function AMPage() {
                 </div>
               ))}
             </div>
+            {!visibleTasks.length && <p className="py-6 text-sm text-gray-500">No live tasks yet.</p>}
           </CardContent>
         </Card>
       </div>
@@ -811,7 +679,7 @@ export default function AMPage() {
         <CardContent className="grid gap-4 lg:grid-cols-5">
           <CoachMetric label="Target progress" value={`${achievement.toFixed(1)}%`} />
           <CoachMetric href={opportunityHref(highestValueOpportunity)} label="Highest value opportunity" value={highestValueOpportunity ? highestValueOpportunity.name : "No open opportunity"} />
-          <CoachMetric href={customerHref(highestRiskCustomer, "review-risk")} label="Highest risk customer" value={highestRiskCustomer ? `${highestRiskCustomer.name} (${highestRiskCustomer.risk_score ?? 0})` : "No high-risk customer"} />
+          <CoachMetric href={customerHref(highestRiskCustomer, "review-risk")} label="Highest risk customer" value={highestRiskCustomer ? `${highestRiskCustomer.name} (${tenantRiskScore(highestRiskCustomer).toFixed(0)})` : "No high-risk customer"} />
           <CoachMetric label="Next renewal" value={nextRenewal ? `${nextRenewal.tenant.name} (${nextRenewal.days} days)` : "No renewal due"} />
           <div className="rounded-lg border border-[#0A9599]/30 bg-white p-4 text-sm lg:col-span-5">{coachRecommendation}</div>
         </CardContent>
