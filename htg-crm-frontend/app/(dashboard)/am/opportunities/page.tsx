@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AlertCircle, CalendarClock, CheckCircle2, CircleDollarSign, Edit3, Plus, Target, TrendingUp } from "lucide-react";
@@ -425,6 +425,10 @@ function AMOpportunitiesContent() {
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [stageOpportunity, setStageOpportunity] = useState<Opportunity | null>(null);
   const [stageForm, setStageForm] = useState<StageForm>(emptyStageForm);
+  const [stagePanelHighlight, setStagePanelHighlight] = useState(false);
+  const [stagePanelFocusRequest, setStagePanelFocusRequest] = useState(0);
+  const stagePanelRef = useRef<HTMLDivElement | null>(null);
+  const stagePanelHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
   const selectedOpportunityId = searchParams.get("opportunity") ?? "";
@@ -535,6 +539,30 @@ function AMOpportunitiesContent() {
     setCreateForm((current) => (current.tenantId === selectedCustomer.id ? current : { ...current, tenantId: selectedCustomer.id }));
   }, [selectedAction, selectedCustomer]);
 
+  useEffect(() => {
+    if (!stagePanelFocusRequest) return;
+
+    stagePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setStagePanelHighlight(true);
+
+    if (stagePanelHighlightTimeoutRef.current) {
+      clearTimeout(stagePanelHighlightTimeoutRef.current);
+    }
+
+    stagePanelHighlightTimeoutRef.current = setTimeout(() => {
+      setStagePanelHighlight(false);
+      stagePanelHighlightTimeoutRef.current = null;
+    }, 1500);
+  }, [stagePanelFocusRequest]);
+
+  useEffect(() => {
+    return () => {
+      if (stagePanelHighlightTimeoutRef.current) {
+        clearTimeout(stagePanelHighlightTimeoutRef.current);
+      }
+    };
+  }, []);
+
   function clearOpportunitySelection() {
     router.push("/am/opportunities");
   }
@@ -549,6 +577,7 @@ function AMOpportunitiesContent() {
     setEditing(null);
     setSuccess("");
     setError("");
+    setStagePanelFocusRequest((current) => current + 1);
   }
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
@@ -690,6 +719,7 @@ function AMOpportunitiesContent() {
     setEditing(null);
     setSuccess("");
     setError("");
+    setStagePanelFocusRequest((current) => current + 1);
   }
 
   if (status === "loading" || loading) return <div className="p-8 text-gray-500">Loading...</div>;
@@ -929,55 +959,60 @@ function AMOpportunitiesContent() {
       )}
 
       {stageOpportunity && (
-        <FormSection title={`Change Stage - ${stageOpportunity.companyName}`}>
-          <form className="grid gap-4 lg:grid-cols-3" onSubmit={submitStage}>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 lg:col-span-3">
-              <p className="text-sm text-gray-500">Current stage</p>
-              <p className="mt-1 font-semibold text-gray-900">
-                {stageOpportunity.stageNumber}. {stageOpportunity.stageName}
-              </p>
-            </div>
-            <Label text="Stage action">
-              <select className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, action: event.target.value as StageAction, confirmed: false })} value={stageForm.action}>
-                <option disabled={!nextStage(stageOpportunity)} value="next">
-                  Advance to {nextStage(stageOpportunity) ? STAGE_LABELS[nextStage(stageOpportunity) as number] : "next stage"}
-                </option>
-                <option value="won">Mark Won</option>
-                <option value="lost">Mark Lost</option>
-                <option value="dormant">Mark Dormant</option>
-              </select>
-            </Label>
-            {stageForm.action === "lost" && (
-              <>
-                <Label text="Loss reason">
-                  <input className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, reason: event.target.value })} required value={stageForm.reason} />
-                </Label>
-                <Label text="Competitor">
-                  <input className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, competitor: event.target.value })} required value={stageForm.competitor} />
-                </Label>
-              </>
-            )}
-            {(stageForm.action === "won" || stageForm.action === "dormant" || targetStageForAction(stageOpportunity, stageForm.action) === 9) && (
-              <label className="flex items-center gap-2 text-sm text-gray-700 lg:col-span-3">
-                <input
-                  checked={stageForm.confirmed}
-                  className="h-4 w-4 rounded border-gray-300 text-[#0A9599] focus:ring-[#0A9599]"
-                  onChange={(event) => setStageForm({ ...stageForm, confirmed: event.target.checked })}
-                  type="checkbox"
-                />
-                Confirm this stage change.
-              </label>
-            )}
-            <div className="flex gap-3 lg:col-span-3">
-              <PrimaryButton disabled={submitting} type="submit">
-                Update Stage
-              </PrimaryButton>
-              <SecondaryButton onClick={() => setStageOpportunity(null)} type="button">
-                Cancel
-              </SecondaryButton>
-            </div>
-          </form>
-        </FormSection>
+        <div
+          className={`scroll-mt-24 rounded-lg transition-shadow duration-300 ${stagePanelHighlight ? "ring-2 ring-teal-500 ring-offset-2" : ""}`}
+          ref={stagePanelRef}
+        >
+          <FormSection title={`Change Stage - ${stageOpportunity.companyName}`}>
+            <form className="grid gap-4 lg:grid-cols-3" onSubmit={submitStage}>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 lg:col-span-3">
+                <p className="text-sm text-gray-500">Current stage</p>
+                <p className="mt-1 font-semibold text-gray-900">
+                  {stageOpportunity.stageNumber}. {stageOpportunity.stageName}
+                </p>
+              </div>
+              <Label text="Stage action">
+                <select className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, action: event.target.value as StageAction, confirmed: false })} value={stageForm.action}>
+                  <option disabled={!nextStage(stageOpportunity)} value="next">
+                    Advance to {nextStage(stageOpportunity) ? STAGE_LABELS[nextStage(stageOpportunity) as number] : "next stage"}
+                  </option>
+                  <option value="won">Mark Won</option>
+                  <option value="lost">Mark Lost</option>
+                  <option value="dormant">Mark Dormant</option>
+                </select>
+              </Label>
+              {stageForm.action === "lost" && (
+                <>
+                  <Label text="Loss reason">
+                    <input className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, reason: event.target.value })} required value={stageForm.reason} />
+                  </Label>
+                  <Label text="Competitor">
+                    <input className={inputClassName} onChange={(event) => setStageForm({ ...stageForm, competitor: event.target.value })} required value={stageForm.competitor} />
+                  </Label>
+                </>
+              )}
+              {(stageForm.action === "won" || stageForm.action === "dormant" || targetStageForAction(stageOpportunity, stageForm.action) === 9) && (
+                <label className="flex items-center gap-2 text-sm text-gray-700 lg:col-span-3">
+                  <input
+                    checked={stageForm.confirmed}
+                    className="h-4 w-4 rounded border-gray-300 text-[#0A9599] focus:ring-[#0A9599]"
+                    onChange={(event) => setStageForm({ ...stageForm, confirmed: event.target.checked })}
+                    type="checkbox"
+                  />
+                  Confirm this stage change.
+                </label>
+              )}
+              <div className="flex gap-3 lg:col-span-3">
+                <PrimaryButton disabled={submitting} type="submit">
+                  Update Stage
+                </PrimaryButton>
+                <SecondaryButton onClick={() => setStageOpportunity(null)} type="button">
+                  Cancel
+                </SecondaryButton>
+              </div>
+            </form>
+          </FormSection>
+        </div>
       )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -1088,6 +1123,11 @@ function AMOpportunitiesContent() {
                         <p>{opportunity.probability.toFixed(1)}% probability</p>
                         <p>{displayDate(opportunity.expectedCloseDate)}</p>
                         <p className="font-medium text-[#0A9599]">{nextActionForStage(opportunity.stageNumber)}</p>
+                      </div>
+                      <div className="mt-3">
+                        <SmallButton disabled={!isOpen(opportunity)} onClick={() => startStage(opportunity)} type="button">
+                          Stage
+                        </SmallButton>
                       </div>
                     </div>
                   );
