@@ -30,6 +30,13 @@ const STAGE_LABELS: Record<number, string> = {
   11: "Dormant",
 };
 
+const COUNTRY_BY_ID: Record<string, string> = {
+  "029d3da0-19a7-4bd1-8dbb-a915bef8055e": "Somalia",
+  "30f5c442-ada7-4f06-9e42-69dcf2eb195b": "Kenya",
+  "d064f0d3-2833-485a-a864-44e6beb76f34": "Ethiopia",
+  "25d20433-056d-413b-9a3c-362a730f3c0a": "Djibouti",
+};
+
 type ApiEnvelope<T> = {
   data: T | null;
   error?: {
@@ -49,6 +56,8 @@ type LeadRow = {
   tenant_name?: string;
   country?: string;
   country_name?: string;
+  country_id?: string;
+  countryId?: string;
   stage?: string | number;
   stage_name?: string;
   stage_number?: number;
@@ -218,7 +227,12 @@ function opportunityValue(lead: LeadRow) {
   return lead.value ?? lead.value_usd ?? lead.valueUsd ?? lead.potential_value_usd ?? lead.estimated_value ?? lead.deal_value ?? lead.amount ?? 0;
 }
 
-function normalizeOpportunity(lead: LeadRow, index: number): NormalizedOpportunity {
+function opportunityCountry(lead: LeadRow, countriesByID: Map<string, string>) {
+  const countryId = lead.country_id ?? lead.countryId ?? "";
+  return lead.country ?? lead.country_name ?? (countryId ? countriesByID.get(countryId) ?? COUNTRY_BY_ID[countryId] : undefined) ?? "—";
+}
+
+function normalizeOpportunity(lead: LeadRow, index: number, countriesByID: Map<string, string>): NormalizedOpportunity {
   const stage = opportunityStage(lead);
   const hasStableId = Boolean(lead.id);
 
@@ -227,7 +241,7 @@ function normalizeOpportunity(lead: LeadRow, index: number): NormalizedOpportuni
     hasStableId,
     name: lead.name ?? lead.opportunity_name ?? lead.title ?? lead.company_name ?? "Unnamed opportunity",
     customer: lead.company_name ?? lead.companyName ?? lead.customer ?? lead.tenant_name ?? lead.name ?? "Unassigned customer",
-    country: lead.country ?? lead.country_name ?? "Unassigned",
+    country: opportunityCountry(lead, countriesByID),
     stage,
     value: opportunityValue(lead),
     probability: opportunityProbability(lead, stage),
@@ -334,7 +348,16 @@ export default function AMPage() {
 
   const myCustomers = tenantsData;
   const rawOpportunities = leadsData;
-  const opportunities = useMemo(() => rawOpportunities.map(normalizeOpportunity), [rawOpportunities]);
+  const countriesByID = useMemo(() => {
+    const countries = new Map<string, string>();
+    myCustomers.forEach((tenant) => {
+      const country = tenantCountry(tenant);
+      if (tenant.country_id && country) countries.set(tenant.country_id, country);
+    });
+    Object.entries(COUNTRY_BY_ID).forEach(([id, name]) => countries.set(id, name));
+    return countries;
+  }, [myCustomers]);
+  const opportunities = useMemo(() => rawOpportunities.map((lead, index) => normalizeOpportunity(lead, index, countriesByID)), [rawOpportunities, countriesByID]);
 
   const myARR = myCustomers.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
   const achievement = MY_TARGET > 0 ? (myARR / MY_TARGET) * 100 : 0;
@@ -487,7 +510,7 @@ export default function AMPage() {
               <tbody>
                 {opportunities.map((opportunity) => (
                   <tr
-                    className="cursor-pointer border-b transition hover:bg-gray-50 focus-within:bg-gray-50 last:border-0"
+                    className="cursor-pointer border-b transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-inset last:border-0"
                     key={opportunity.id}
                     onClick={() => router.push(opportunityHref(opportunity))}
                     onKeyDown={(event) => {
@@ -542,13 +565,13 @@ export default function AMPage() {
               <tbody>
                 {attentionCustomers.map(({ tenant, days, health }) => (
                   <tr
-                    className="cursor-pointer border-b transition hover:bg-gray-50 focus-within:bg-gray-50 last:border-0"
+                    className="cursor-pointer border-b transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-inset last:border-0"
                     key={tenant.id}
-                    onClick={() => router.push(customerHref(tenant, "review-risk"))}
+                    onClick={() => router.push(customerHref(tenant))}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        router.push(customerHref(tenant, "review-risk"));
+                        router.push(customerHref(tenant));
                       }
                     }}
                     tabIndex={0}
