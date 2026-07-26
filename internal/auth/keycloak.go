@@ -20,13 +20,14 @@ const UserContextKey = "user"
 type ContextKey struct{}
 
 type UserContext struct {
-	ID              uuid.UUID   `json:"sub"`
-	KeycloakSubject uuid.UUID   `json:"keycloak_subject"`
-	Email           string      `json:"email"`
-	Role            string      `json:"role"`
-	CountryOfficeID uuid.UUID   `json:"country_office_id"`
-	Regions         []uuid.UUID `json:"regions"`
-	Sectors         []uuid.UUID `json:"sectors"`
+	ID                uuid.UUID   `json:"sub"`
+	KeycloakSubject   uuid.UUID   `json:"keycloak_subject"`
+	Email             string      `json:"email"`
+	PreferredUsername string      `json:"preferred_username"`
+	Role              string      `json:"role"`
+	CountryOfficeID   uuid.UUID   `json:"country_office_id"`
+	Regions           []uuid.UUID `json:"regions"`
+	Sectors           []uuid.UUID `json:"sectors"`
 }
 
 type cachedJWKS struct {
@@ -212,13 +213,14 @@ func userFromToken(token jwt.Token) (UserContext, error) {
 	}
 
 	return UserContext{
-		ID:              userID,
-		KeycloakSubject: userID,
-		Email:           stringClaim(token, "email"),
-		Role:            role,
-		CountryOfficeID: countryOfficeID,
-		Regions:         uuidSliceClaim(token, "regions"),
-		Sectors:         uuidSliceClaim(token, "sectors"),
+		ID:                userID,
+		KeycloakSubject:   userID,
+		Email:             stringClaim(token, "email"),
+		PreferredUsername: stringClaim(token, "preferred_username"),
+		Role:              role,
+		CountryOfficeID:   countryOfficeID,
+		Regions:           uuidSliceClaim(token, "regions"),
+		Sectors:           uuidSliceClaim(token, "sectors"),
 	}, nil
 }
 

@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 
@@ -116,20 +117,31 @@ func main() {
 	api.Use(appmiddleware.Pagination())
 
 	usersRepository := usersmodule.NewRepository(postgresPool)
-	appmiddleware.SetUserResolver(func(ctx context.Context, keycloakID uuid.UUID) (auth.UserContext, bool, error) {
-		user, err := usersRepository.FindByKeycloakID(ctx, keycloakID)
+	appmiddleware.SetUserResolver(func(ctx context.Context, tokenUser auth.UserContext) (auth.UserContext, bool, error) {
+		email := strings.TrimSpace(tokenUser.Email)
+		if email == "" {
+			email = strings.TrimSpace(tokenUser.PreferredUsername)
+		}
+		if email == "" {
+			logger.Error().Msg("no user for email ")
+			return auth.UserContext{}, false, errors.New("token missing email and preferred_username")
+		}
+
+		user, err := usersRepository.FindByEmail(ctx, email)
 		if err != nil {
+			logger.Error().Err(err).Str("email", email).Msgf("no user for email %s", email)
 			return auth.UserContext{}, false, err
 		}
 
 		return auth.UserContext{
-			ID:              user.ID,
-			KeycloakSubject: keycloakID,
-			Email:           user.Email,
-			Role:            user.Role,
-			CountryOfficeID: user.CountryOfficeID,
-			Regions:         user.Regions,
-			Sectors:         user.Sectors,
+			ID:                user.ID,
+			KeycloakSubject:   tokenUser.KeycloakSubject,
+			Email:             user.Email,
+			PreferredUsername: tokenUser.PreferredUsername,
+			Role:              user.Role,
+			CountryOfficeID:   user.CountryOfficeID,
+			Regions:           user.Regions,
+			Sectors:           user.Sectors,
 		}, user.IsActive, nil
 	})
 	keycloakAdmin := usersmodule.NewKeycloakAdminClient(cfg.KeycloakURL, cfg.KeycloakRealm, cfg.KeycloakAdminClientSecret)

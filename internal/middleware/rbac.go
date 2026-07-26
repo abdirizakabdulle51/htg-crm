@@ -35,7 +35,7 @@ var (
 	auditLogger       zerolog.Logger
 )
 
-type UserResolverFunc func(ctx context.Context, keycloakID uuid.UUID) (auth.UserContext, bool, error)
+type UserResolverFunc func(ctx context.Context, tokenUser auth.UserContext) (auth.UserContext, bool, error)
 
 func SetKeycloakValidator(validator *auth.KeycloakValidator) {
 	keycloakValidator = validator
@@ -74,12 +74,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		if userResolver != nil {
-			keycloakID := userCtx.KeycloakSubject
-			if keycloakID == uuid.Nil {
-				keycloakID = userCtx.ID
-			}
-
-			resolvedUser, active, err := userResolver(c.Request.Context(), keycloakID)
+			resolvedUser, active, err := userResolver(c.Request.Context(), userCtx)
 			if err != nil {
 				response.Error(c, http.StatusUnauthorized, response.CodeUnauthorized, "No valid JWT")
 				c.Abort()
@@ -91,7 +86,10 @@ func AuthMiddleware() gin.HandlerFunc {
 				return
 			}
 			if resolvedUser.KeycloakSubject == uuid.Nil {
-				resolvedUser.KeycloakSubject = keycloakID
+				resolvedUser.KeycloakSubject = userCtx.KeycloakSubject
+			}
+			if resolvedUser.PreferredUsername == "" {
+				resolvedUser.PreferredUsername = userCtx.PreferredUsername
 			}
 			userCtx = resolvedUser
 		}
