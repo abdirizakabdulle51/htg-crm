@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { Bell, LogOut, UserCircle } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,14 +13,52 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { countryNameByID } from "@/lib/countries";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
+
+type ApiEnvelope<T> = {
+  data?: T | null;
+};
+
+type UserProfile = {
+  country_office_id?: string;
+};
 
 export function Header() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const pathname = usePathname();
-  const country =
-    (session as { country?: string } | null)?.country ??
-    (session as { user?: { country?: string } } | null)?.user?.country ??
-    "Kenya";
+  const [gmCountry, setGmCountry] = useState("");
+  const gmWorkspaceTitle = gmCountry ? `${gmCountry} Country Workspace` : "Country Workspace";
+
+  useEffect(() => {
+    if (!pathname?.startsWith("/gm")) return;
+    if (status !== "authenticated") return;
+    const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
+    if (!token) return;
+
+    let cancelled = false;
+    async function loadCountry() {
+      try {
+        const response = await fetch(`${API}/api/v1/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error("Unable to load profile");
+        const body = (await response.json()) as ApiEnvelope<UserProfile> | UserProfile;
+        const profile = body && typeof body === "object" && "data" in body ? (body as ApiEnvelope<UserProfile>).data : (body as UserProfile);
+        if (!cancelled) setGmCountry(countryNameByID(profile?.country_office_id));
+      } catch {
+        if (!cancelled) setGmCountry("");
+      }
+    }
+
+    void loadCountry();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, session, status]);
+
   const headerCopy = {
     "/admin": {
       title: "System Administration",
@@ -94,7 +133,7 @@ export function Header() {
       description: "Board-ready reports, executive summaries, revenue exports, and strategic business reporting.",
     },
     "/gm": {
-      title: `${country} Country Workspace`,
+      title: gmWorkspaceTitle,
       description: "Country execution dashboard for revenue, pipeline, customers, renewals, and daily operational priorities.",
     },
     "/gm/team": {

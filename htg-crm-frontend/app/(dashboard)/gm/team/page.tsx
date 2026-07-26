@@ -3,15 +3,9 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 
-import { formatUSD } from "@/lib/utils";
+import { countryNameByID } from "@/lib/countries";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
-const COUNTRY_BY_ID: Record<string, string> = {
-  "029d3da0-19a7-4bd1-8dbb-a915bef8055e": "Somalia",
-  "30f5c442-ada7-4f06-9e42-69dcf2eb195b": "Kenya",
-  "d064f0d3-2833-485a-a864-44e6beb76f34": "Ethiopia",
-  "25d20433-056d-413b-9a3c-362a730f3c0a": "Djibouti",
-};
 
 type ApiEnvelope<T> = {
   data?: T | null;
@@ -24,27 +18,8 @@ type UserProfile = {
   country_office_id?: string;
 };
 
-// TODO: mock - needs backend
-const mockAMs = [
-  { name: "AM 01", tenants: 2, arr: 930000, pipeline: 670000, achievement: 88, atRisk: 1, status: "On Track" },
-  { name: "AM 02", tenants: 2, arr: 720000, pipeline: 300000, achievement: 72, atRisk: 0, status: "On Track" },
-  { name: "AM 03", tenants: 2, arr: 450000, pipeline: 180000, achievement: 54, atRisk: 0, status: "Behind" },
-];
-
-function achievementClass(value: number) {
-  if (value >= 80) return "text-green-700";
-  if (value >= 60) return "text-yellow-700";
-  return "text-red-700";
-}
-
-function statusClass(status: string) {
-  if (status === "On Track") return "bg-green-100 text-green-700";
-  return "bg-red-100 text-red-700";
-}
-
 export default function GMTeamPage() {
   const { data: session, status } = useSession();
-  const [accountManagers] = useState(mockAMs);
   const [country, setCountry] = useState("");
   const [loadError, setLoadError] = useState("");
 
@@ -67,7 +42,7 @@ export default function GMTeamPage() {
           throw new Error(envelope.error?.message ?? `Request failed: ${response.status}`);
         }
         const profile = body && typeof body === "object" && "data" in body ? (body as ApiEnvelope<UserProfile>).data : (body as UserProfile);
-        const countryName = profile?.country_office_id ? COUNTRY_BY_ID[profile.country_office_id] : "";
+        const countryName = countryNameByID(profile?.country_office_id);
         if (!countryName) throw new Error("GM profile is missing a country assignment");
         if (!cancelled) setCountry(countryName);
       } catch {
@@ -86,13 +61,6 @@ export default function GMTeamPage() {
   if (!session) return null;
   if (loadError || !country) return <div className="p-8 text-gray-500">{loadError || "No country assignment found for this GM."}</div>;
 
-  const totalARR = accountManagers.reduce((sum, am) => sum + am.arr, 0);
-  const averageAchievement =
-    accountManagers.length > 0
-      ? accountManagers.reduce((sum, am) => sum + am.achievement, 0) / accountManagers.length
-      : 0;
-  const atRiskOwned = accountManagers.reduce((sum, am) => sum + am.atRisk, 0);
-
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -101,10 +69,10 @@ export default function GMTeamPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Total Account Managers" value={accountManagers.length.toString()} />
-        <KpiCard label="Total ARR Managed" value={formatUSD(totalARR)} />
-        <KpiCard label="Average Achievement %" value={`${averageAchievement.toFixed(0)}%`} />
-        <KpiCard label="At-Risk Accounts Owned" value={atRiskOwned.toString()} />
+        <KpiCard label="Total Account Managers" value="0" />
+        <KpiCard label="Total ARR Managed" value="-" />
+        <KpiCard label="Average Achievement %" value="-" />
+        <KpiCard label="At-Risk Accounts Owned" value="0" />
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -123,23 +91,11 @@ export default function GMTeamPage() {
               </tr>
             </thead>
             <tbody>
-              {accountManagers.map((am) => (
-                <tr className="border-b last:border-0" key={am.name}>
-                  <td className="py-3 pr-4 font-medium text-gray-900">{am.name}</td>
-                  <td className="py-3 pr-4 text-right">{am.tenants}</td>
-                  <td className="py-3 pr-4 text-right font-semibold">{formatUSD(am.arr)}</td>
-                  <td className="py-3 pr-4 text-right font-semibold">{formatUSD(am.pipeline)}</td>
-                  <td className={`py-3 pr-4 text-right font-semibold ${achievementClass(am.achievement)}`}>
-                    {am.achievement}%
-                  </td>
-                  <td className="py-3 pr-4 text-right">{am.atRisk}</td>
-                  <td className="py-3 text-right">
-                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass(am.status)}`}>
-                      {am.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              <tr>
+                <td className="py-8 text-center text-sm text-gray-500" colSpan={7}>
+                  Account Manager performance - coming soon.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

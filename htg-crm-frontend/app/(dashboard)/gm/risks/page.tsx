@@ -3,17 +3,11 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { countryNameByID } from "@/lib/countries";
 import { formatUSD } from "@/lib/utils";
 import type { Tenant } from "@/types/crm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
-
-const COUNTRY_BY_ID: Record<string, string> = {
-  "029d3da0-19a7-4bd1-8dbb-a915bef8055e": "Somalia",
-  "30f5c442-ada7-4f06-9e42-69dcf2eb195b": "Kenya",
-  "d064f0d3-2833-485a-a864-44e6beb76f34": "Ethiopia",
-  "25d20433-056d-413b-9a3c-362a730f3c0a": "Djibouti",
-};
 
 type ApiEnvelope<T> = {
   data?: T | null;
@@ -113,7 +107,7 @@ export default function GMRisksPage() {
       setLoadError("");
       try {
         const profile = await fetchJson<UserProfile>("/api/v1/me");
-        const countryName = profile.country_office_id ? COUNTRY_BY_ID[profile.country_office_id] : "";
+        const countryName = countryNameByID(profile.country_office_id);
         if (!countryName) throw new Error("GM profile is missing a country assignment");
         const rows = await fetchJson<Tenant[] | { tenants?: Tenant[]; items?: Tenant[] }>("/api/v1/tenants");
         if (cancelled) return;
