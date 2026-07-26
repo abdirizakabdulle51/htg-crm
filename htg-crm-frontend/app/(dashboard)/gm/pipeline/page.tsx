@@ -55,11 +55,11 @@ function leadValue(lead: LeadRow) {
 }
 
 function leadSector(lead: LeadRow) {
-  return lead.sector ?? lead.sector_name ?? "Unassigned";
+  return lead.sector_name ?? lead.sector ?? "—";
 }
 
 function leadOwner(lead: LeadRow) {
-  return lead.owner ?? lead.owner_name ?? lead.account_manager_name ?? "Unassigned";
+  return lead.owner_name ?? lead.owner ?? lead.account_manager_name ?? "—";
 }
 
 function leadStage(lead: LeadRow) {

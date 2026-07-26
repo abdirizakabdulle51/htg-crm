@@ -441,7 +441,12 @@ func openLeadWhere(where string) string {
 	return where + fmt.Sprintf(" AND stage_number NOT IN (%d, %d, %d)", StageWon, StageLost, StageDormant)
 }
 
-const leadColumns = `id, owner_id, country_id, region_id, sector_id, company_name, COALESCE(contact_name, ''), COALESCE(contact_email, ''), COALESCE(contact_phone, ''), stage::text, stage_number, status::text, value_usd, probability, expected_close_date, COALESCE(source, ''), COALESCE(notes, ''), COALESCE(lost_reason, ''), COALESCE(competitor, ''), won_date, created_at, updated_at`
+const leadColumns = `id, owner_id, country_id, region_id, sector_id,
+	COALESCE((SELECT name FROM sectors WHERE sectors.id = leads.sector_id), ''),
+	COALESCE((SELECT NULLIF(full_name, '') FROM users WHERE users.id = leads.owner_id), (SELECT email FROM users WHERE users.id = leads.owner_id), ''),
+	company_name, COALESCE(contact_name, ''), COALESCE(contact_email, ''), COALESCE(contact_phone, ''),
+	stage::text, stage_number, status::text, value_usd, probability, expected_close_date, COALESCE(source, ''),
+	COALESCE(notes, ''), COALESCE(lost_reason, ''), COALESCE(competitor, ''), won_date, created_at, updated_at`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -502,7 +507,7 @@ func (r *transactionRepository) createActivity(ctx context.Context, leadID, user
 
 func scanLead(row scanner) (*Lead, error) {
 	item := &Lead{}
-	err := row.Scan(&item.ID, &item.OwnerID, &item.CountryID, &item.RegionID, &item.SectorID, &item.CompanyName, &item.ContactName, &item.ContactEmail, &item.ContactPhone, &item.Stage, &item.StageNumber, &item.Status, &item.ValueUSD, &item.Probability, &item.ExpectedCloseDate, &item.Source, &item.Notes, &item.LostReason, &item.Competitor, &item.WonDate, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.OwnerID, &item.CountryID, &item.RegionID, &item.SectorID, &item.SectorName, &item.OwnerName, &item.CompanyName, &item.ContactName, &item.ContactEmail, &item.ContactPhone, &item.Stage, &item.StageNumber, &item.Status, &item.ValueUSD, &item.Probability, &item.ExpectedCloseDate, &item.Source, &item.Notes, &item.LostReason, &item.Competitor, &item.WonDate, &item.CreatedAt, &item.UpdatedAt)
 	item.Probability *= 100
 	item.StageName = StageName(item.StageNumber)
 	return item, err

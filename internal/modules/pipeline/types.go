@@ -25,6 +25,8 @@ type Lead struct {
 	CountryID         uuid.UUID  `json:"country_id"`
 	RegionID          *uuid.UUID `json:"region_id,omitempty"`
 	SectorID          uuid.UUID  `json:"sector_id"`
+	SectorName        string     `json:"sector_name,omitempty"`
+	OwnerName         string     `json:"owner_name,omitempty"`
 	CompanyName       string     `json:"company_name"`
 	ContactName       string     `json:"contact_name,omitempty"`
 	ContactEmail      string     `json:"contact_email,omitempty"`
