@@ -12,12 +12,12 @@ import type { Tenant } from "@/types/crm";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 const STAGES = ["Prospect", "Qualified", "Proposal", "Negotiation", "Won", "Lost"] as const;
 
-const mockLeads: LeadRow[] = [
-  { name: "Banking Expansion", value: 450000, stage: "Proposal", sector: "Finance", owner: "AM 01", status: "Open" },
-  { name: "Government Cloud", value: 300000, stage: "Qualified", sector: "Government", owner: "AM 02", status: "Open" },
-  { name: "Telecom Backup", value: 220000, stage: "Negotiation", sector: "Telecom", owner: "AM 01", status: "Open" },
-  { name: "Healthcare DR", value: 180000, stage: "Prospect", sector: "Healthcare", owner: "AM 03", status: "Open" },
-];
+const COUNTRY_BY_ID: Record<string, string> = {
+  "029d3da0-19a7-4bd1-8dbb-a915bef8055e": "Somalia",
+  "30f5c442-ada7-4f06-9e42-69dcf2eb195b": "Kenya",
+  "d064f0d3-2833-485a-a864-44e6beb76f34": "Ethiopia",
+  "25d20433-056d-413b-9a3c-362a730f3c0a": "Djibouti",
+};
 
 type ApiEnvelope<T> = {
   data: T | null;
@@ -35,6 +35,13 @@ type TargetRow = {
 
 type TargetsResponse = {
   targets?: TargetRow[];
+};
+
+type UserProfile = {
+  id: string;
+  name?: string;
+  role?: string;
+  country_office_id?: string;
 };
 
 type LeadRow = {
@@ -86,7 +93,18 @@ function tenantHealthScore(tenant: Tenant) {
   if (tenant.health === "YELLOW") return 70;
   if (tenant.health === "RED") return 40;
 
-  return Math.max(0, 100 - (tenant.risk_score ?? 0));
+  const risk = tenant.risk_score ?? 0;
+  return Math.max(0, 100 - (risk <= 1 ? risk * 100 : risk));
+}
+
+function tenantRiskScore(tenant: Tenant) {
+  const source = tenant as Tenant & { health_score?: number; healthScore?: number; riskScore?: number };
+  const score = tenant.risk_score ?? source.riskScore;
+  const health = source.health_score ?? source.healthScore;
+  if (typeof score === "number" && score > 0) return score <= 1 ? score * 100 : score;
+  if (typeof health === "number" && health > 0 && health <= 1) return (1 - health) * 100;
+  if (typeof score === "number") return score;
+  return 0;
 }
 
 function riskClass(score: number) {
@@ -135,18 +153,16 @@ function leadStage(lead: LeadRow): (typeof STAGES)[number] {
 }
 
 export function GMDashboard() {
-  const { data: session } = useSession();
-  const country =
-    (session as { country?: string } | null)?.country ??
-    (session as { user?: { country?: string } } | null)?.user?.country ??
-    "Kenya";
+  const { data: session, status } = useSession();
+  const [country, setCountry] = useState("");
   const [tenantsData, setTenantsData] = useState<Tenant[]>([]);
   const [targetsData, setTargetsData] = useState<TargetsResponse>({});
   const [leadsData, setLeadsData] = useState<LeadsResponse>([]);
   const [tenantsLoading, setTenantsLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    if (!session) return;
+    if (status !== "authenticated") return;
 
     async function fetchJson<T>(url: string, token: string): Promise<T> {
       const response = await fetch(`${API}${url}`, {
@@ -171,6 +187,7 @@ export function GMDashboard() {
 
     async function loadDashboardData() {
       setTenantsLoading(true);
+      setLoadError("");
 
       try {
         const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
@@ -179,29 +196,36 @@ export function GMDashboard() {
           throw new Error("GM dashboard missing access token");
         }
 
-        const countryParam = encodeURIComponent(country);
+        const profile = await fetchJson<UserProfile>("/api/v1/me", token);
+        const countryName = profile.country_office_id ? COUNTRY_BY_ID[profile.country_office_id] : "";
+        if (!countryName) {
+          throw new Error("GM profile is missing a country assignment");
+        }
+
         const tenants = await fetchJson<Tenant[] | { tenants?: Tenant[]; items?: Tenant[] }>(
-          `/api/v1/tenants?country=${countryParam}`,
+          "/api/v1/tenants",
           token,
         );
 
         const [targets, leads] = await Promise.all([
-          fetchJson<TargetsResponse>(`/api/v1/targets?quarter=3&year=2026&country=${countryParam}`, token),
-          fetchJson<LeadsResponse>(`/api/v1/leads?country=${countryParam}`, token),
+          fetchJson<TargetsResponse>("/api/v1/targets?quarter=3&year=2026", token),
+          fetchJson<LeadsResponse>("/api/v1/leads", token),
         ]);
 
         if (cancelled) return;
 
+        setCountry(countryName);
         setTenantsData(unwrapList<Tenant>(tenants));
         setTargetsData(targets ?? {});
-        const leadRows = unwrapList<LeadRow>(leads);
-        setLeadsData(leadRows.length ? leadRows : mockLeads);
+        setLeadsData(unwrapList<LeadRow>(leads));
       } catch (error) {
         console.error("GM dashboard fetch failed", error);
         if (!cancelled) {
+          setCountry("");
           setTenantsData([]);
           setTargetsData({});
-          setLeadsData(mockLeads);
+          setLeadsData([]);
+          setLoadError(error instanceof Error ? error.message : "Unable to load GM dashboard data.");
         }
       } finally {
         if (!cancelled) setTenantsLoading(false);
@@ -213,7 +237,7 @@ export function GMDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [country, session]);
+  }, [session, status]);
 
   const tenants = useMemo(() => unwrapList<Tenant>(tenantsData), [tenantsData]);
   const countryFromApi =
@@ -232,7 +256,7 @@ export function GMDashboard() {
   const achievement = q3Target > 0 ? (countryARR / q3Target) * 100 : 0;
   const revenueGap = Math.max(q3Target - countryARR, 0);
   const activeTenants = countryTenants.length;
-  const atRiskTenants = countryTenants.filter((tenant) => (tenant.risk_score ?? 0) > 50).length;
+  const atRiskTenants = countryTenants.filter((tenant) => tenantRiskScore(tenant) > 50).length;
 
   const topCustomers = useMemo(
     () => [...countryTenants].sort((a, b) => tenantARR(b) - tenantARR(a)).slice(0, 5),
@@ -256,7 +280,7 @@ export function GMDashboard() {
       .sort((a, b) => b.arr - a.arr);
   }, [countryARR, countryTenants]);
   const atRiskRows = useMemo(
-    () => countryTenants.filter((tenant) => (tenant.risk_score ?? 0) > 50).sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0)),
+    () => countryTenants.filter((tenant) => tenantRiskScore(tenant) > 50).sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a)),
     [countryTenants],
   );
   const renewalRows = useMemo(
@@ -272,9 +296,9 @@ export function GMDashboard() {
     countryTenants.length > 0
       ? countryTenants.reduce((sum, tenant) => sum + tenantHealthScore(tenant), 0) / countryTenants.length
       : 0;
-  const highestRiskTenant = [...countryTenants].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))[0];
+  const highestRiskTenant = [...countryTenants].sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a))[0];
   const dailyActions = [
-    ...atRiskRows.slice(0, 2).map((tenant) => `Follow up with ${tenant.name} - risk score ${tenant.risk_score ?? 0}`),
+    ...atRiskRows.slice(0, 2).map((tenant) => `Follow up with ${tenant.name} - risk score ${tenantRiskScore(tenant).toFixed(0)}`),
     ...urgentRenewals.slice(0, 2).map((row) => `Renewal due: ${row.tenant.name} in ${row.days} days`),
     ...(achievement < 50 ? [`Review Q3 gap with team - ${achievement.toFixed(1)}% achieved`] : []),
     "Review pipeline with Account Managers",
@@ -298,12 +322,24 @@ export function GMDashboard() {
     [leads],
   );
 
-  if (!session) {
+  if (status === "loading" || tenantsLoading) {
     return (
       <div className="space-y-5">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-normal">Country Manager Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Loading session...</p>
+          <p className="text-sm text-muted-foreground">Loading country dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+  if (!session) return null;
+
+  if (loadError || !country) {
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-normal">Country Manager Dashboard</h1>
+          <p className="text-sm text-muted-foreground">{loadError || "No country assignment found for this GM."}</p>
         </div>
       </div>
     );
@@ -361,13 +397,13 @@ export function GMDashboard() {
               </thead>
               <tbody>
                 {atRiskRows.map((tenant) => {
-                  const risk = tenant.risk_score ?? 0;
+                  const risk = tenantRiskScore(tenant);
                   return (
                     <tr className="border-b last:border-0" key={tenant.id}>
                       <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                       <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
                       <td className="py-3 pr-4 text-right">
-                        <Badge className={riskClass(risk)}>{risk}</Badge>
+                        <Badge className={riskClass(risk)}>{risk.toFixed(0)}</Badge>
                       </td>
                       <td className="py-3 pr-4 text-muted-foreground">{formatDate(tenantRenewalDate(tenant))}</td>
                       <td className="py-3 text-right">
@@ -447,7 +483,7 @@ export function GMDashboard() {
               <CoachMetric label="Q3 achievement" value={`${achievement.toFixed(1)}%`} />
               <CoachMetric
                 label="Highest risk tenant"
-                value={highestRiskTenant ? `${highestRiskTenant.name} (${highestRiskTenant.risk_score ?? 0})` : "No tenant risk"}
+                value={highestRiskTenant ? `${highestRiskTenant.name} (${tenantRiskScore(highestRiskTenant).toFixed(0)})` : "No tenant risk"}
               />
             </div>
             <div className="rounded-lg border border-[#0A9599]/30 bg-white p-3 text-sm">{coachRecommendation}</div>
@@ -473,14 +509,14 @@ export function GMDashboard() {
               </thead>
               <tbody>
                 {topCustomers.map((tenant) => {
-                  const risk = tenant.risk_score ?? 0;
+                  const risk = tenantRiskScore(tenant);
                   return (
                     <tr className="border-b last:border-0" key={tenant.id}>
                       <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{tenantSector(tenant)}</td>
                       <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
                       <td className="py-3 pr-4 text-right">
-                        <Badge className={riskClass(risk)}>{risk}</Badge>
+                        <Badge className={riskClass(risk)}>{risk.toFixed(0)}</Badge>
                       </td>
                       <td className="py-3 text-right text-muted-foreground">{tenant.status ?? "UNKNOWN"}</td>
                     </tr>
@@ -511,6 +547,7 @@ export function GMDashboard() {
               </div>
             ))}
           </div>
+          {!leads.length && <p className="mt-4 text-sm text-muted-foreground">No pipeline leads found for {country}.</p>}
         </CardContent>
       </Card>
     </div>

@@ -308,28 +308,7 @@ func applyGMCountryFilter(c *gin.Context, filters *TenantFilters) (shouldReturn 
 		return true, false
 	}
 
-	countryName := c.Query("country")
-	if countryName == "" {
-		return false, true
-	}
-
-	var countryUUIDs = map[string]string{
-		"Somalia":  "029d3da0-19a7-4bd1-8dbb-a915bef8055e",
-		"Kenya":    "30f5c442-ada7-4f06-9e42-69dcf2eb195b",
-		"Ethiopia": "d064f0d3-2833-485a-a864-44e6beb76f34",
-		"Djibouti": "25d20433-056d-413b-9a3c-362a730f3c0a",
-	}
-
-	countryID, ok := countryUUIDs[countryName]
-	if !ok {
-		return false, true
-	}
-
-	parsed, err := uuid.Parse(countryID)
-	if err != nil {
-		return false, true
-	}
-	filters.CountryID = parsed
+	filters.CountryID = userCtx.CountryOfficeID
 	return true, false
 }
 

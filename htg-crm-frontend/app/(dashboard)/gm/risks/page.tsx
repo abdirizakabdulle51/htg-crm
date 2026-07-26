@@ -8,8 +8,22 @@ import type { Tenant } from "@/types/crm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 
+const COUNTRY_BY_ID: Record<string, string> = {
+  "029d3da0-19a7-4bd1-8dbb-a915bef8055e": "Somalia",
+  "30f5c442-ada7-4f06-9e42-69dcf2eb195b": "Kenya",
+  "d064f0d3-2833-485a-a864-44e6beb76f34": "Ethiopia",
+  "25d20433-056d-413b-9a3c-362a730f3c0a": "Djibouti",
+};
+
 type ApiEnvelope<T> = {
   data?: T | null;
+  error?: {
+    message?: string;
+  } | null;
+};
+
+type UserProfile = {
+  country_office_id?: string;
 };
 
 function unwrapTenants(value: Tenant[] | { tenants?: Tenant[]; items?: Tenant[] } | null | undefined) {
@@ -40,7 +54,18 @@ function tenantHealthScore(tenant: Tenant) {
   if (tenant.health === "GREEN") return 90;
   if (tenant.health === "YELLOW") return 70;
   if (tenant.health === "RED") return 40;
-  return Math.max(0, 100 - (tenant.risk_score ?? 0));
+  const risk = tenant.risk_score ?? 0;
+  return Math.max(0, 100 - (risk <= 1 ? risk * 100 : risk));
+}
+
+function tenantRiskScore(tenant: Tenant) {
+  const source = tenant as Tenant & { health_score?: number; healthScore?: number; riskScore?: number };
+  const score = tenant.risk_score ?? source.riskScore;
+  const health = source.health_score ?? source.healthScore;
+  if (typeof score === "number" && score > 0) return score <= 1 ? score * 100 : score;
+  if (typeof health === "number" && health > 0 && health <= 1) return (1 - health) * 100;
+  if (typeof score === "number") return score;
+  return 0;
 }
 
 function healthClass(score: number) {
@@ -59,30 +84,59 @@ function formatDate(value: string | null) {
 export default function GMRisksPage() {
   const { data: session, status } = useSession();
   const [tenants, setTenants] = useState<Tenant[]>([]);
-
-  const country =
-    (session as { country?: string } | null)?.country ??
-    (session as { user?: { country?: string } } | null)?.user?.country ??
-    "Kenya";
+  const [country, setCountry] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     if (status !== "authenticated") return;
     const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
     if (!token) return;
 
-    fetch(`${API}/api/v1/tenants?country=${encodeURIComponent(country)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      credentials: "include",
-    })
-      .then((response) => response.json())
-      .then((json: ApiEnvelope<Tenant[] | { tenants?: Tenant[]; items?: Tenant[] }>) => {
-        setTenants(unwrapTenants(json.data));
-      })
-      .catch(() => setTenants([]));
-  }, [country, session, status]);
+    let cancelled = false;
+    async function fetchJson<T>(url: string): Promise<T> {
+      const response = await fetch(`${API}${url}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      const body = (await response.json()) as ApiEnvelope<T> | T;
+      if (!response.ok) {
+        const envelope = body as ApiEnvelope<T>;
+        throw new Error(envelope.error?.message ?? `Request failed: ${response.status}`);
+      }
+      if (body && typeof body === "object" && "data" in body) return (body as ApiEnvelope<T>).data as T;
+      return body as T;
+    }
+
+    async function loadRisks() {
+      setLoading(true);
+      setLoadError("");
+      try {
+        const profile = await fetchJson<UserProfile>("/api/v1/me");
+        const countryName = profile.country_office_id ? COUNTRY_BY_ID[profile.country_office_id] : "";
+        if (!countryName) throw new Error("GM profile is missing a country assignment");
+        const rows = await fetchJson<Tenant[] | { tenants?: Tenant[]; items?: Tenant[] }>("/api/v1/tenants");
+        if (cancelled) return;
+        setCountry(countryName);
+        setTenants(unwrapTenants(rows));
+      } catch (error) {
+        if (cancelled) return;
+        setCountry("");
+        setTenants([]);
+        setLoadError(error instanceof Error ? error.message : "Unable to load country risks.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadRisks();
+    return () => {
+      cancelled = true;
+    };
+  }, [session, status]);
 
   const atRiskTenants = useMemo(
-    () => tenants.filter((tenant) => (tenant.risk_score ?? 0) > 50).sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0)),
+    () => tenants.filter((tenant) => tenantRiskScore(tenant) > 50).sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a)),
     [tenants],
   );
   const churnRiskARR = atRiskTenants.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
@@ -91,8 +145,9 @@ export default function GMRisksPage() {
     return typeof score === "number" ? score < 0.6 : tenantHealthScore(tenant) < 60;
   }).length;
 
-  if (status === "loading") return <div className="p-8 text-gray-500">Loading...</div>;
+  if (status === "loading" || loading) return <div className="p-8 text-gray-500">Loading...</div>;
   if (!session) return null;
+  if (loadError || !country) return <div className="p-8 text-gray-500">{loadError || "No country assignment found for this GM."}</div>;
 
   return (
     <div className="space-y-4">
@@ -124,13 +179,13 @@ export default function GMRisksPage() {
             </thead>
             <tbody>
               {atRiskTenants.map((tenant) => {
-                const risk = tenant.risk_score ?? 0;
+                const risk = tenantRiskScore(tenant);
                 return (
                   <tr className="border-b last:border-0" key={tenant.id}>
                     <td className="py-3 pr-4 font-medium text-gray-900">{tenant.name}</td>
                     <td className="py-3 pr-4 text-gray-500">{tenantSector(tenant)}</td>
                     <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
-                    <td className="py-3 pr-4 text-right font-semibold text-red-700">{risk}</td>
+                    <td className="py-3 pr-4 text-right font-semibold text-red-700">{risk.toFixed(0)}</td>
                     <td className={`py-3 pr-4 text-right font-semibold ${healthClass(tenantHealthScore(tenant))}`}>
                       {tenantHealthScore(tenant).toFixed(0)}
                     </td>

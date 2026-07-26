@@ -8,8 +8,22 @@ import type { Tenant } from "@/types/crm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 
+const COUNTRY_BY_ID: Record<string, string> = {
+  "029d3da0-19a7-4bd1-8dbb-a915bef8055e": "Somalia",
+  "30f5c442-ada7-4f06-9e42-69dcf2eb195b": "Kenya",
+  "d064f0d3-2833-485a-a864-44e6beb76f34": "Ethiopia",
+  "25d20433-056d-413b-9a3c-362a730f3c0a": "Djibouti",
+};
+
 type ApiEnvelope<T> = {
   data?: T | null;
+  error?: {
+    message?: string;
+  } | null;
+};
+
+type UserProfile = {
+  country_office_id?: string;
 };
 
 function unwrapTenants(value: Tenant[] | { tenants?: Tenant[]; items?: Tenant[] } | null | undefined) {
@@ -36,7 +50,8 @@ function tenantHealthScore(tenant: Tenant) {
   if (tenant.health === "GREEN") return 90;
   if (tenant.health === "YELLOW") return 70;
   if (tenant.health === "RED") return 40;
-  return Math.max(0, 100 - (tenant.risk_score ?? 0));
+  const risk = tenant.risk_score ?? 0;
+  return Math.max(0, 100 - (risk <= 1 ? risk * 100 : risk));
 }
 
 function daysUntil(value: string | null) {
@@ -65,27 +80,56 @@ function daysClass(days: number) {
 export default function GMRenewalsPage() {
   const { data: session, status } = useSession();
   const [tenants, setTenants] = useState<Tenant[]>([]);
-
-  const country =
-    (session as { country?: string } | null)?.country ??
-    (session as { user?: { country?: string } } | null)?.user?.country ??
-    "Kenya";
+  const [country, setCountry] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     if (status !== "authenticated") return;
     const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
     if (!token) return;
 
-    fetch(`${API}/api/v1/tenants?country=${encodeURIComponent(country)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      credentials: "include",
-    })
-      .then((response) => response.json())
-      .then((json: ApiEnvelope<Tenant[] | { tenants?: Tenant[]; items?: Tenant[] }>) => {
-        setTenants(unwrapTenants(json.data));
-      })
-      .catch(() => setTenants([]));
-  }, [country, session, status]);
+    let cancelled = false;
+    async function fetchJson<T>(url: string): Promise<T> {
+      const response = await fetch(`${API}${url}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      const body = (await response.json()) as ApiEnvelope<T> | T;
+      if (!response.ok) {
+        const envelope = body as ApiEnvelope<T>;
+        throw new Error(envelope.error?.message ?? `Request failed: ${response.status}`);
+      }
+      if (body && typeof body === "object" && "data" in body) return (body as ApiEnvelope<T>).data as T;
+      return body as T;
+    }
+
+    async function loadRenewals() {
+      setLoading(true);
+      setLoadError("");
+      try {
+        const profile = await fetchJson<UserProfile>("/api/v1/me");
+        const countryName = profile.country_office_id ? COUNTRY_BY_ID[profile.country_office_id] : "";
+        if (!countryName) throw new Error("GM profile is missing a country assignment");
+        const rows = await fetchJson<Tenant[] | { tenants?: Tenant[]; items?: Tenant[] }>("/api/v1/tenants");
+        if (cancelled) return;
+        setCountry(countryName);
+        setTenants(unwrapTenants(rows));
+      } catch (error) {
+        if (cancelled) return;
+        setCountry("");
+        setTenants([]);
+        setLoadError(error instanceof Error ? error.message : "Unable to load country renewals.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadRenewals();
+    return () => {
+      cancelled = true;
+    };
+  }, [session, status]);
 
   const renewalRows = useMemo(
     () =>
@@ -99,8 +143,9 @@ export default function GMRenewalsPage() {
   const within90 = renewalRows.filter((row) => row.days >= 0 && row.days <= 90);
   const arrAtRisk = within90.reduce((sum, row) => sum + tenantARR(row.tenant), 0);
 
-  if (status === "loading") return <div className="p-8 text-gray-500">Loading...</div>;
+  if (status === "loading" || loading) return <div className="p-8 text-gray-500">Loading...</div>;
   if (!session) return null;
+  if (loadError || !country) return <div className="p-8 text-gray-500">{loadError || "No country assignment found for this GM."}</div>;
 
   return (
     <div className="space-y-4">

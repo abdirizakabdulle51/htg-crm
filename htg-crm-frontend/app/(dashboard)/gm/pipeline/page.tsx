@@ -9,15 +9,22 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 
 const stages = ["Prospect", "Qualified", "Proposal", "Negotiation", "Won", "Lost"];
 
-const mockLeads: LeadRow[] = [
-  { name: "Banking Expansion", value: 450000, stage: "Proposal", sector: "Finance", owner: "AM 01", status: "Open" },
-  { name: "Government Cloud", value: 300000, stage: "Qualified", sector: "Government", owner: "AM 02", status: "Open" },
-  { name: "Telecom Backup", value: 220000, stage: "Negotiation", sector: "Telecom", owner: "AM 01", status: "Open" },
-  { name: "Healthcare DR", value: 180000, stage: "Prospect", sector: "Healthcare", owner: "AM 03", status: "Open" },
-];
+const COUNTRY_BY_ID: Record<string, string> = {
+  "029d3da0-19a7-4bd1-8dbb-a915bef8055e": "Somalia",
+  "30f5c442-ada7-4f06-9e42-69dcf2eb195b": "Kenya",
+  "d064f0d3-2833-485a-a864-44e6beb76f34": "Ethiopia",
+  "25d20433-056d-413b-9a3c-362a730f3c0a": "Djibouti",
+};
 
 type ApiEnvelope<T> = {
   data?: T | null;
+  error?: {
+    message?: string;
+  } | null;
+};
+
+type UserProfile = {
+  country_office_id?: string;
 };
 
 type LeadRow = {
@@ -66,7 +73,7 @@ function leadStage(lead: LeadRow) {
   const number = lead.stage_number ?? (typeof lead.stage === "number" ? lead.stage : undefined);
   if (text.includes("won") || number === 9) return "Won";
   if (text.includes("lost") || number === 10) return "Lost";
-  if (text.includes("negotiation") || (number ?? 0) >= 7) return "Negotiation";
+  if (text.includes("negotiation") || (number ?? 0) >= 6) return "Negotiation";
   if (text.includes("proposal") || (number ?? 0) >= 5) return "Proposal";
   if (text.includes("qualified") || (number ?? 0) >= 3) return "Qualified";
   return "Prospect";
@@ -83,32 +90,57 @@ function stageClass(stage: string) {
 
 export default function GMPipelinePage() {
   const { data: session, status } = useSession();
-  const [leads, setLeads] = useState<LeadRow[]>(mockLeads);
-
-  const country =
-    (session as { country?: string } | null)?.country ??
-    (session as { user?: { country?: string } } | null)?.user?.country ??
-    "Kenya";
+  const [leads, setLeads] = useState<LeadRow[]>([]);
+  const [country, setCountry] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     if (status !== "authenticated") return;
     const token = (session as { accessToken?: string } | null)?.accessToken ?? "";
     if (!token) return;
 
-    fetch(`${API}/api/v1/leads?country=${encodeURIComponent(country)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      credentials: "include",
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error(`Leads request failed: ${response.status}`);
-        return response.json();
-      })
-      .then((json: ApiEnvelope<LeadRow[] | { leads?: LeadRow[]; items?: LeadRow[] }>) => {
-        const rows = unwrapLeads(json.data);
-        setLeads(rows.length ? rows : mockLeads);
-      })
-      .catch(() => setLeads(mockLeads));
-  }, [country, session, status]);
+    let cancelled = false;
+    async function fetchJson<T>(url: string): Promise<T> {
+      const response = await fetch(`${API}${url}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      const body = (await response.json()) as ApiEnvelope<T> | T;
+      if (!response.ok) {
+        const envelope = body as ApiEnvelope<T>;
+        throw new Error(envelope.error?.message ?? `Request failed: ${response.status}`);
+      }
+      if (body && typeof body === "object" && "data" in body) return (body as ApiEnvelope<T>).data as T;
+      return body as T;
+    }
+
+    async function loadPipeline() {
+      setLoading(true);
+      setLoadError("");
+      try {
+        const profile = await fetchJson<UserProfile>("/api/v1/me");
+        const countryName = profile.country_office_id ? COUNTRY_BY_ID[profile.country_office_id] : "";
+        if (!countryName) throw new Error("GM profile is missing a country assignment");
+        const rows = await fetchJson<LeadRow[] | { leads?: LeadRow[]; items?: LeadRow[] }>("/api/v1/leads");
+        if (cancelled) return;
+        setCountry(countryName);
+        setLeads(unwrapLeads(rows));
+      } catch (error) {
+        if (cancelled) return;
+        setCountry("");
+        setLeads([]);
+        setLoadError(error instanceof Error ? error.message : "Unable to load country pipeline.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadPipeline();
+    return () => {
+      cancelled = true;
+    };
+  }, [session, status]);
 
   const totalPipeline = leads.reduce((sum, lead) => sum + leadValue(lead), 0);
   const averageDealSize = leads.length ? totalPipeline / leads.length : 0;
@@ -125,8 +157,9 @@ export default function GMPipelinePage() {
     [leads],
   );
 
-  if (status === "loading") return <div className="p-8 text-gray-500">Loading...</div>;
+  if (status === "loading" || loading) return <div className="p-8 text-gray-500">Loading...</div>;
   if (!session) return null;
+  if (loadError || !country) return <div className="p-8 text-gray-500">{loadError || "No country assignment found for this GM."}</div>;
 
   return (
     <div className="space-y-4">
@@ -187,6 +220,7 @@ export default function GMPipelinePage() {
             </tbody>
           </table>
         </div>
+        {!leads.length && <p className="py-8 text-sm text-gray-500">No leads found for {country}.</p>}
       </div>
     </div>
   );
