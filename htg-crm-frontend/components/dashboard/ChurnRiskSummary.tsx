@@ -5,7 +5,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { tenantARR } from "@/components/dashboard/executive-utils";
+import { tenantARR, tenantRiskScore } from "@/components/dashboard/executive-utils";
 import { cn, formatUSD } from "@/lib/utils";
 import type { TeamTarget, Tenant } from "@/types/crm";
 
@@ -31,11 +31,11 @@ export function ChurnRiskSummary({ tenants, team }: ChurnRiskSummaryProps) {
   const teamMap = new Map((team ?? []).map((member) => [member.user_id, member.name]));
   const totalARR = rows.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
   const distribution = [
-    { name: "High", value: rows.filter((tenant) => (tenant.risk_score ?? 0) > 80).length },
-    { name: "Medium", value: rows.filter((tenant) => (tenant.risk_score ?? 0) >= 60 && (tenant.risk_score ?? 0) <= 80).length },
-    { name: "Monitored", value: rows.filter((tenant) => (tenant.risk_score ?? 0) >= 40 && (tenant.risk_score ?? 0) < 60).length },
+    { name: "High", value: rows.filter((tenant) => tenantRiskScore(tenant) > 80).length },
+    { name: "Medium", value: rows.filter((tenant) => tenantRiskScore(tenant) >= 60 && tenantRiskScore(tenant) <= 80).length },
+    { name: "Monitored", value: rows.filter((tenant) => tenantRiskScore(tenant) >= 40 && tenantRiskScore(tenant) < 60).length },
   ].filter((item) => item.value > 0);
-  const top = rows.slice().sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0)).slice(0, 5);
+  const top = rows.slice().sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a)).slice(0, 5);
 
   return (
     <Card className="h-full overflow-hidden">
@@ -81,7 +81,7 @@ export function ChurnRiskSummary({ tenants, team }: ChurnRiskSummaryProps) {
                     {tenant.account_manager_name ?? teamMap.get(tenant.account_manager_id ?? "") ?? "AM pending"}
                   </p>
                 </div>
-                <Badge className={cn("shrink-0", riskClass(tenant.risk_score ?? 0))}>{tenant.risk_score ?? 0}</Badge>
+                <Badge className={cn("shrink-0", riskClass(tenantRiskScore(tenant)))}>{tenantRiskScore(tenant).toFixed(0)}</Badge>
               </Link>
             ))}
           </div>

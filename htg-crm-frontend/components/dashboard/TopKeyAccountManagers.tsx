@@ -2,9 +2,9 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { achievementPercent, tenantARR } from "@/components/dashboard/executive-utils";
+import { achievementPercent, isAtRiskTenant, tenantARR } from "@/components/dashboard/executive-utils";
 import { cn, formatUSD } from "@/lib/utils";
-import type { PipelineOverview, Tenant } from "@/types/crm";
+import type { Tenant } from "@/types/crm";
 
 export type KeyAccountManagerPerformance = "Excellent" | "Good" | "Needs Attention" | "Critical";
 
@@ -25,14 +25,39 @@ type TopKeyAccountManagersProps = {
 };
 
 const COUNTRIES = ["Kenya", "Somalia", "Ethiopia", "Djibouti"] as const;
+const COUNTRY_BY_ID: Record<string, (typeof COUNTRIES)[number]> = {
+  "30f5c442-ada7-4f06-9e42-69dcf2eb195b": "Kenya",
+  "029d3da0-19a7-4bd1-8dbb-a915bef8055e": "Somalia",
+  "d064f0d3-2833-485a-a864-44e6beb76f34": "Ethiopia",
+  "25d20433-056d-413b-9a3c-362a730f3c0a": "Djibouti",
+};
+
+type LeadRow = {
+  country?: string;
+  country_id?: string;
+  countryId?: string;
+  stage?: string | number;
+  stage_number?: number;
+  stageNumber?: number;
+  stage_name?: string;
+  stageName?: string;
+  status?: string;
+  value_usd?: number;
+  valueUsd?: number;
+  potential_value_usd?: number;
+  won_date?: string | null;
+  wonDate?: string | null;
+  updated_at?: string | null;
+  updatedAt?: string | null;
+};
 
 const FALLBACK_ROWS: Record<(typeof COUNTRIES)[number], Omit<KeyAccountManagerRow, "performance" | "score">> = {
   Kenya: {
     name: "Account Manager",
     country: "Kenya",
     arrManaged: 1890000,
-    pipelineValue: 1150000,
-    wonThisMonth: 450000,
+    pipelineValue: 0,
+    wonThisMonth: 0,
     activeTenants: 5,
     atRiskTenants: 1,
   },
@@ -40,7 +65,7 @@ const FALLBACK_ROWS: Record<(typeof COUNTRIES)[number], Omit<KeyAccountManagerRo
     name: "AM Somalia",
     country: "Somalia",
     arrManaged: 1236000,
-    pipelineValue: 990000,
+    pipelineValue: 0,
     wonThisMonth: 0,
     activeTenants: 4,
     atRiskTenants: 1,
@@ -49,7 +74,7 @@ const FALLBACK_ROWS: Record<(typeof COUNTRIES)[number], Omit<KeyAccountManagerRo
     name: "AM Ethiopia",
     country: "Ethiopia",
     arrManaged: 1800000,
-    pipelineValue: 940000,
+    pipelineValue: 0,
     wonThisMonth: 0,
     activeTenants: 4,
     atRiskTenants: 0,
@@ -58,7 +83,7 @@ const FALLBACK_ROWS: Record<(typeof COUNTRIES)[number], Omit<KeyAccountManagerRo
     name: "AM Djibouti",
     country: "Djibouti",
     arrManaged: 828000,
-    pipelineValue: 430000,
+    pipelineValue: 0,
     wonThisMonth: 0,
     activeTenants: 3,
     atRiskTenants: 0,
@@ -86,22 +111,62 @@ function performanceClass(performance: KeyAccountManagerPerformance) {
 }
 
 function tenantCountry(tenant: Tenant) {
-  return tenant.country ?? "Unassigned";
+  return tenant.country ?? (tenant.country_id ? COUNTRY_BY_ID[tenant.country_id] : undefined) ?? "Unassigned";
+}
+
+function leadCountry(lead: LeadRow) {
+  return lead.country ?? (lead.country_id ? COUNTRY_BY_ID[lead.country_id] : undefined) ?? (lead.countryId ? COUNTRY_BY_ID[lead.countryId] : undefined);
+}
+
+function leadValue(lead: LeadRow) {
+  return lead.value_usd ?? lead.valueUsd ?? lead.potential_value_usd ?? 0;
+}
+
+function leadStageNumber(lead: LeadRow) {
+  if (typeof lead.stage_number === "number") return lead.stage_number;
+  if (typeof lead.stageNumber === "number") return lead.stageNumber;
+  if (typeof lead.stage === "number") return lead.stage;
+  if (typeof lead.stage === "string") {
+    const parsed = Number.parseInt(lead.stage, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function isOpenLead(lead: LeadRow) {
+  const stageNumber = leadStageNumber(lead);
+  if (typeof stageNumber === "number" && [9, 10, 11].includes(stageNumber)) return false;
+
+  const stateText = [lead.stage, lead.stage_name, lead.stageName, lead.status]
+    .filter(Boolean)
+    .join(" ")
+    .toUpperCase();
+
+  return !["WON", "LOST", "DORMANT", "CLOSED"].some((token) => stateText.includes(token));
+}
+
+function isWonThisMonth(lead: LeadRow) {
+  if (leadStageNumber(lead) !== 9) return false;
+  const value = lead.won_date ?? lead.wonDate ?? lead.updated_at ?? lead.updatedAt;
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 }
 
 export function buildKeyAccountManagers({
   tenants,
-  pipeline,
+  leads,
   countryTargets,
 }: {
   tenants?: Tenant[] | null;
-  pipeline?: PipelineOverview | null;
+  leads?: LeadRow[] | null;
   countryTargets?: Record<string, number>;
 }) {
   const rows = tenants ?? [];
+  const leadRows = leads ?? [];
   const hasTenantData = rows.length > 0;
-  const pipelineByCountry = new Map((pipeline?.by_country ?? []).map((country) => [country.country, country.value]));
-  const wonThisMonth = pipeline?.won_this_month?.value ?? 0;
 
   // Version 2: real Account Manager ownership will replace this mock ranking.
   return COUNTRIES.map((country) => {
@@ -118,12 +183,13 @@ export function buildKeyAccountManagers({
         ? 0
         : fallback.activeTenants;
     const atRiskTenants = countryTenants.length
-      ? countryTenants.filter((tenant) => (tenant.risk_score ?? 0) > 50 || (tenant.status ?? "").toUpperCase() === "AT_RISK").length
+      ? countryTenants.filter(isAtRiskTenant).length
       : hasTenantData
         ? 0
         : fallback.atRiskTenants;
-    const pipelineValue = pipelineByCountry.get(country) ?? fallback.pipelineValue;
-    const countryWon = country === "Kenya" ? wonThisMonth || fallback.wonThisMonth : fallback.wonThisMonth;
+    const countryLeads = leadRows.filter((lead) => leadCountry(lead) === country);
+    const pipelineValue = countryLeads.filter(isOpenLead).reduce((sum, lead) => sum + leadValue(lead), 0);
+    const countryWon = countryLeads.filter(isWonThisMonth).reduce((sum, lead) => sum + leadValue(lead), 0);
     const score = achievementPercent(arrManaged, countryTargets?.[country] ?? fallback.arrManaged);
 
     return {

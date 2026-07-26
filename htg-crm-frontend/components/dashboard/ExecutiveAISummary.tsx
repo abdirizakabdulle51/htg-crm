@@ -3,7 +3,7 @@
 import { BrainCircuit } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { tenantARR } from "@/components/dashboard/executive-utils";
+import { tenantARR, tenantRiskScore } from "@/components/dashboard/executive-utils";
 import type { KeyAccountManagerRow } from "@/components/dashboard/TopKeyAccountManagers";
 import { formatUSD } from "@/lib/utils";
 import type { Tenant } from "@/types/crm";
@@ -34,7 +34,7 @@ export function ExecutiveAISummary({
     : 0;
   const forecastProbability = q3Target > 0 ? (q3Achieved / q3Target) * 100 : 0;
   const largestTenant = rows.slice().sort((a, b) => tenantARR(b) - tenantARR(a))[0];
-  const highestRiskTenant = rows.slice().sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))[0];
+  const highestRiskTenant = rows.slice().sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a))[0];
   const countryARR = rows.reduce<Record<string, number>>((acc, tenant) => {
     const country = tenant.country ?? "Unassigned";
     acc[country] = (acc[country] ?? 0) + tenantARR(tenant);
@@ -70,7 +70,7 @@ export function ExecutiveAISummary({
           />
           <SummaryMetric
             label="Highest Risk Tenant"
-            value={highestRiskTenant ? `${highestRiskTenant.name} (${highestRiskTenant.risk_score ?? 0})` : "No risk data"}
+            value={highestRiskTenant ? `${highestRiskTenant.name} (${tenantRiskScore(highestRiskTenant).toFixed(0)})` : "No risk data"}
           />
           <SummaryMetric
             label="Top Account Manager"

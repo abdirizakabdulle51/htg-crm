@@ -9,6 +9,7 @@ import { CalendarClock, ShieldAlert, TrendingDown } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isAtRiskTenant, tenantRiskScore } from "@/components/dashboard/executive-utils";
 import { cn, formatDate, formatUSD } from "@/lib/utils";
 import type { Contract, Tenant } from "@/types/crm";
 
@@ -34,23 +35,22 @@ function riskClass(score: number) {
 }
 
 function riskReason(tenant: Tenant) {
-  const score = tenant.risk_score ?? 0;
+  const score = tenantRiskScore(tenant);
   if (score >= 80) return "Critical churn signal from high risk score and weak account health.";
   if (score >= 70) return "Elevated risk score indicates declining engagement or unresolved service concerns.";
-  if (tenant.status === "AT_RISK") return "Tenant is marked at risk and needs executive follow-up.";
   return "Monitor account health before the risk score rises further.";
 }
 
 function recommendedAction(tenant: Tenant) {
-  const score = tenant.risk_score ?? 0;
-  if (tenant.status === "ACTIVE" && score < 50) return "Maintain relationship and monitor customer health.";
+  const score = tenantRiskScore(tenant);
+  if (score <= 50) return "Maintain relationship and monitor customer health.";
   if (score >= 80) return "Schedule an executive retention call this week.";
   if (score >= 70) return "Create a recovery plan with the account manager and service owner.";
   return "Confirm next action, renewal owner, and service satisfaction.";
 }
 
 function usageDeclinePercent(tenant: Tenant) {
-  const score = tenant.risk_score ?? 0;
+  const score = tenantRiskScore(tenant);
   return Math.min(45, Math.max(12, Math.round(score / 2)));
 }
 
@@ -118,15 +118,12 @@ function StrategicRisksContent() {
   const { data: tenants } = useSWR<Tenant[]>(canFetch ? "/api/v1/tenants?limit=100" : null, authedFetcher, {
     refreshInterval: 120000,
   });
-  const { data: atRisk } = useSWR<Tenant[]>(canFetch ? "/api/v1/tenants/at-risk?limit=20" : null, authedFetcher, {
-    refreshInterval: 120000,
-  });
   const { data: renewals } = useSWR<Contract[]>(canFetch ? "/api/v1/tenants/renewals?days=90&limit=20" : null, authedFetcher, {
     refreshInterval: 120000,
   });
 
   const tenantByID = new Map((tenants ?? []).map((tenant) => [tenant.id, tenant]));
-  const atRiskRows = (atRisk ?? []).slice().sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0));
+  const atRiskRows = (tenants ?? []).filter(isAtRiskTenant).sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a));
   const churnRiskARR = atRiskRows.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
   const activeRows = (tenants ?? []).filter((tenant) => tenant.status === "ACTIVE");
   const tenantMatch = tenantParam ? (tenants ?? []).find((tenant) => tenant.name.toLowerCase() === tenantParam.toLowerCase()) : undefined;
@@ -139,8 +136,8 @@ function StrategicRisksContent() {
       ? activeRows
       : filter === "at-risk"
         ? (tenants ?? [])
-            .filter((tenant) => tenant.status === "AT_RISK" || (tenant.risk_score ?? 0) > 50)
-            .sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))
+            .filter(isAtRiskTenant)
+            .sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a))
         : atRiskRows;
   const tableTitle = tenantParam ? "Tenant Risk Detail" : filter === "active" ? "Active Tenants" : "At-Risk Tenants";
   const emptyMessage = tenantParam
@@ -149,7 +146,7 @@ function StrategicRisksContent() {
       ? "No active tenants found."
       : "No at-risk tenants found.";
   const decliningUsage = (tenants ?? [])
-    .filter((tenant) => (tenant.risk_score ?? 0) >= 55 || tenant.status === "AT_RISK")
+    .filter((tenant) => tenantRiskScore(tenant) >= 55)
     .sort((a, b) => usageDeclinePercent(b) - usageDeclinePercent(a))
     .slice(0, 6);
   const renewalRows = (renewals ?? []).slice().sort((a, b) => daysUntil(a.end_date, a.days_to_expiry) - daysUntil(b.end_date, b.days_to_expiry));
@@ -168,7 +165,7 @@ function StrategicRisksContent() {
       )}
       {filter === "at-risk" && (
         <ContextBanner href="/strategic-risks" title="Showing at-risk tenants">
-          Tenants marked AT_RISK or with risk score above 50 are highlighted for executive follow-up.
+          Tenants with risk score above 50 are highlighted for executive follow-up.
         </ContextBanner>
       )}
       {tenantParam && (
@@ -232,7 +229,7 @@ function StrategicRisksContent() {
               </thead>
               <tbody>
                 {filterRows.map((tenant) => {
-                  const score = tenant.risk_score ?? 0;
+                  const score = tenantRiskScore(tenant);
                   return (
                     <tr
                       className={cn(

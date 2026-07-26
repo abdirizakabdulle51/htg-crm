@@ -20,6 +20,7 @@ import SetTargetsModal from "@/components/dashboard/SetTargetsModal";
 import { StrategicAccounts } from "@/components/dashboard/StrategicAccounts";
 import { StrategicOpportunities, type StrategicOpportunity } from "@/components/dashboard/StrategicOpportunities";
 import { buildKeyAccountManagers, TopKeyAccountManagers } from "@/components/dashboard/TopKeyAccountManagers";
+import { isAtRiskTenant, tenantRiskScore } from "@/components/dashboard/executive-utils";
 import { apiFetch } from "@/lib/api";
 import type {
   ForecastResponse,
@@ -170,9 +171,6 @@ export function ExecutiveDashboard() {
   const { data: forecast } = useSWR<ForecastResponse>("/api/v1/ai/forecast?scope=year", fetcher, {
     refreshInterval: 180000,
   });
-  const { data: atRisk } = useSWR<Tenant[]>("/api/v1/tenants/at-risk", fetcher, {
-    refreshInterval: 120000,
-  });
   useSWR("/api/v1/tenants/renewals?days=90", fetcher);
   const { data: tenants } = useSWR<Tenant[]>("/api/v1/tenants?limit=100", fetcher, {
     refreshInterval: 120000,
@@ -186,7 +184,9 @@ export function ExecutiveDashboard() {
   );
 
   const q3Achieved = (teamHealth?.team ?? []).reduce((sum, member) => sum + (member.achieved_usd ?? 0), 0);
-  const keyAccountManagers = buildKeyAccountManagers({ countryTargets, pipeline, tenants });
+  const leadRows = leads ? unwrapLeads(leads) : null;
+  const atRiskTenants = tenants ? tenants.filter(isAtRiskTenant).sort((a, b) => tenantRiskScore(b) - tenantRiskScore(a)) : null;
+  const keyAccountManagers = buildKeyAccountManagers({ countryTargets, leads: leadRows, tenants });
   const topAccountManager = keyAccountManagers[0] ?? null;
   const countriesByID = new Map((pipeline?.by_country ?? []).map((country) => [country.country_id, country.country]));
   const strategicOpportunities: StrategicOpportunity[] | null = leads
@@ -249,7 +249,6 @@ export function ExecutiveDashboard() {
 
       <div className="col-span-12">
         <CompanyKPIBar
-          atRisk={atRisk}
           forecast={forecast}
           pipeline={pipeline}
           q3Target={q3Target}
@@ -311,7 +310,7 @@ export function ExecutiveDashboard() {
         <PipelineHeatmap pipeline={pipeline} />
       </div>
       <div className="col-span-12 h-96 xl:col-span-4">
-        <ChurnRiskSummary team={teamHealth?.team} tenants={atRisk} />
+        <ChurnRiskSummary team={teamHealth?.team} tenants={atRiskTenants} />
       </div>
 
       <div className="col-span-12">

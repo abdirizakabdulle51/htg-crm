@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { tenantARR } from "@/components/dashboard/executive-utils";
+import { isAtRiskTenant, tenantARR } from "@/components/dashboard/executive-utils";
 import { cn, formatUSD } from "@/lib/utils";
 import type { Tenant } from "@/types/crm";
 
@@ -80,7 +80,7 @@ export function ExecutiveAlerts({ tenants, countryTargets }: ExecutiveAlertsProp
     });
   }
 
-  const atRiskCount = rows.filter((tenant) => (tenant.risk_score ?? 0) >= 60).length;
+  const atRiskCount = rows.filter(isAtRiskTenant).length;
   if (atRiskCount > 1) {
     alerts.push({
       tone: "yellow",

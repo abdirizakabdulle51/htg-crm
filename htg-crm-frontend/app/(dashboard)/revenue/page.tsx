@@ -9,6 +9,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isAtRiskTenant, tenantRiskScore } from "@/components/dashboard/executive-utils";
 import { formatUSD } from "@/lib/utils";
 import type { ForecastResponse, PipelineOverview, TeamTargetsResponse, Tenant } from "@/types/crm";
 
@@ -47,8 +48,8 @@ function tenantARR(tenant: Tenant) {
 
 function healthStatus(tenant: Tenant) {
   if (tenant.health) return tenant.health;
-  if ((tenant.risk_score ?? 0) >= 80) return "HIGH RISK";
-  if ((tenant.risk_score ?? 0) >= 60 || tenant.status === "AT_RISK") return "AT RISK";
+  if (tenantRiskScore(tenant) >= 80) return "HIGH RISK";
+  if (isAtRiskTenant(tenant)) return "AT RISK";
   return "HEALTHY";
 }
 

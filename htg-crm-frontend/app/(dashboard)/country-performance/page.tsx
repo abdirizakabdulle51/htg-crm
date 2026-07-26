@@ -8,6 +8,7 @@ import useSWR from "swr";
 import { AlertTriangle, BarChart3, Building2, Target, TrendingUp } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isAtRiskTenant, tenantRiskScore } from "@/components/dashboard/executive-utils";
 import { formatUSD } from "@/lib/utils";
 import type { PipelineOverview, Tenant } from "@/types/crm";
 
@@ -163,7 +164,7 @@ function CountryPerformanceContent() {
       achievement: achievementPercent(achieved, target),
       revenueGap: Math.max(target - achieved, 0),
       activeTenants: countryTenants.filter((tenant) => tenant.status === "ACTIVE").length,
-      atRiskTenants: countryTenants.filter((tenant) => (tenant.risk_score ?? 0) >= 60 || tenant.status === "AT_RISK").length,
+      atRiskTenants: countryTenants.filter(isAtRiskTenant).length,
       pipelineValue: pipelineByCountry.get(country.name) ?? 0,
     };
   }).sort((a, b) => b.totalARR - a.totalARR);
@@ -310,7 +311,7 @@ function CountryPerformanceContent() {
                           <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                           <td className="py-3 pr-4 text-muted-foreground">{tenant.sector ?? tenant.sector_name ?? "—"}</td>
                           <td className="py-3 pr-4 font-semibold">{formatUSD(tenantARR(tenant))}</td>
-                          <td className="py-3">{tenant.risk_score ?? "—"}</td>
+                          <td className="py-3">{tenantRiskScore(tenant).toFixed(0)}</td>
                         </tr>
                       ))}
                     </tbody>
