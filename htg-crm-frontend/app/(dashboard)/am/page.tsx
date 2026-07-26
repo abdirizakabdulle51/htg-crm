@@ -12,7 +12,9 @@ import { formatUSD } from "@/lib/utils";
 import type { Tenant } from "@/types/crm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
-const MY_TARGET = 1200000;
+// Real per-AM targets will come later via the Target Engine.
+const AM_TARGET_PLACEHOLDER = "Not set";
+const AM_ACHIEVEMENT_PLACEHOLDER = "\u2014";
 
 const tasks: Array<{ title: string; due: string; priority: string }> = [];
 
@@ -360,7 +362,6 @@ export default function AMPage() {
   const opportunities = useMemo(() => rawOpportunities.map((lead, index) => normalizeOpportunity(lead, index, countriesByID)), [rawOpportunities, countriesByID]);
 
   const myARR = myCustomers.reduce((sum, tenant) => sum + tenantARR(tenant), 0);
-  const achievement = MY_TARGET > 0 ? (myARR / MY_TARGET) * 100 : 0;
   const openOpportunities = opportunities.filter((opportunity) => !["Won", "Lost", "Dormant"].includes(opportunity.stage));
   const myPipeline = openOpportunities.reduce((sum, opportunity) => sum + opportunity.value, 0);
   const atRiskCustomers = myCustomers.filter((tenant) => tenantRiskScore(tenant) > 50);
@@ -430,8 +431,8 @@ export default function AMPage() {
     <div className="space-y-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard icon={Users} label="My ARR" value={formatUSD(myARR)} />
-        <KpiCard icon={Target} label="My Target" value={formatUSD(MY_TARGET)} />
-        <KpiCard icon={TrendingUp} label="Achievement" value={`${achievement.toFixed(1)}%`} />
+        <KpiCard icon={Target} label="My Target" value={AM_TARGET_PLACEHOLDER} valueClassName="text-gray-400" />
+        <KpiCard icon={TrendingUp} label="Achievement" value={AM_ACHIEVEMENT_PLACEHOLDER} valueClassName="text-gray-400" />
         <KpiCard href="/am/opportunities" icon={BriefcaseBusiness} label="My Pipeline" value={formatUSD(myPipeline)} />
         <KpiCard href="/am/opportunities?status=open" icon={TrendingUp} label="Open Opportunities" value={openOpportunities.length.toString()} />
         <KpiCard href="/am/renewals" icon={CalendarClock} label="Renewals Due" value={renewalsDue.length.toString()} />
@@ -700,7 +701,7 @@ export default function AMPage() {
           <CardTitle className="text-[#0A9599]">Sales Coach</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-5">
-          <CoachMetric label="Target progress" value={`${achievement.toFixed(1)}%`} />
+          <CoachMetric label="Target progress" value={AM_TARGET_PLACEHOLDER} valueClassName="text-gray-400" />
           <CoachMetric href={opportunityHref(highestValueOpportunity)} label="Highest value opportunity" value={highestValueOpportunity ? highestValueOpportunity.name : "No open opportunity"} />
           <CoachMetric href={customerHref(highestRiskCustomer, "review-risk")} label="Highest risk customer" value={highestRiskCustomer ? `${highestRiskCustomer.name} (${tenantRiskScore(highestRiskCustomer).toFixed(0)})` : "No high-risk customer"} />
           <CoachMetric label="Next renewal" value={nextRenewal ? `${nextRenewal.tenant.name} (${nextRenewal.days} days)` : "No renewal due"} />
@@ -711,11 +712,11 @@ export default function AMPage() {
   );
 }
 
-function CoachMetric({ href, label, value }: { href?: string; label: string; value: string }) {
+function CoachMetric({ href, label, value, valueClassName = "text-gray-800" }: { href?: string; label: string; value: string; valueClassName?: string }) {
   const content = (
     <div className="rounded-lg border border-[#0A9599]/20 bg-white p-4">
       <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
-      <p className="mt-2 text-base font-semibold text-gray-800">{value}</p>
+      <p className={`mt-2 text-base font-semibold ${valueClassName}`}>{value}</p>
     </div>
   );
 
@@ -737,11 +738,13 @@ function KpiCard({
   icon: Icon,
   label,
   value,
+  valueClassName = "text-gray-900",
 }: {
   href?: string;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
+  valueClassName?: string;
 }) {
   const content = (
     <Card className={`bg-white rounded-lg shadow-sm border border-gray-200 ${href ? "cursor-pointer transition hover:border-[#0A9599]/40 hover:shadow-md" : ""}`}>
@@ -750,7 +753,7 @@ function KpiCard({
           <p className="text-sm text-gray-500">{label}</p>
           <Icon className="h-4 w-4 text-[#0A9599]" />
         </div>
-        <p className="text-2xl font-semibold tracking-normal text-gray-900">{value}</p>
+        <p className={`text-2xl font-semibold tracking-normal ${valueClassName}`}>{value}</p>
       </CardContent>
     </Card>
   );
