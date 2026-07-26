@@ -35,16 +35,35 @@ type cachedJWKS struct {
 type KeycloakValidator struct {
 	keycloakURL string
 	realm       string
+	issuer      string
+	jwksURL     string
 	audience    string
 	cache       sync.Map
 }
 
 func NewKeycloakValidator(keycloakURL, realm, audience string) *KeycloakValidator {
+	keycloakURL = strings.TrimRight(keycloakURL, "/")
+	issuer := fmt.Sprintf("%s/realms/%s", keycloakURL, realm)
 	return &KeycloakValidator{
-		keycloakURL: strings.TrimRight(keycloakURL, "/"),
+		keycloakURL: keycloakURL,
 		realm:       realm,
+		issuer:      issuer,
+		jwksURL:     fmt.Sprintf("%s/protocol/openid-connect/certs", issuer),
 		audience:    audience,
 	}
+}
+
+func NewKeycloakValidatorWithIssuer(keycloakURL, realm, issuer, jwksURL, audience string) *KeycloakValidator {
+	validator := NewKeycloakValidator(keycloakURL, realm, audience)
+	if strings.TrimSpace(issuer) != "" {
+		validator.issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
+	}
+	if strings.TrimSpace(jwksURL) != "" {
+		validator.jwksURL = strings.TrimSpace(jwksURL)
+	} else {
+		validator.jwksURL = fmt.Sprintf("%s/protocol/openid-connect/certs", validator.issuer)
+	}
+	return validator
 }
 
 func (v *KeycloakValidator) Validate(ctx context.Context, bearerToken string) (UserContext, error) {
@@ -53,25 +72,10 @@ func (v *KeycloakValidator) Validate(ctx context.Context, bearerToken string) (U
 		return UserContext{}, err
 	}
 
-	keySet, err := v.fetchJWKS(ctx)
+	token, err := v.parseToken(ctx, rawToken, false)
 	if err != nil {
-		return UserContext{}, err
+		token, err = v.parseToken(ctx, rawToken, true)
 	}
-
-	issuer := fmt.Sprintf("%s/realms/%s", v.keycloakURL, v.realm)
-	parseOptions := []jwt.ParseOption{
-		jwt.WithKeySet(keySet),
-		jwt.WithValidate(true),
-		jwt.WithIssuer(issuer),
-	}
-	if v.audience != "" {
-		parseOptions = append(parseOptions, jwt.WithAudience(v.audience))
-	}
-
-	token, err := jwt.Parse(
-		[]byte(rawToken),
-		parseOptions...,
-	)
 	if err != nil {
 		return UserContext{}, err
 	}
@@ -79,20 +83,53 @@ func (v *KeycloakValidator) Validate(ctx context.Context, bearerToken string) (U
 	return userFromToken(token)
 }
 
-func (v *KeycloakValidator) JWKSURL() string {
-	return fmt.Sprintf("%s/realms/%s/protocol/openid-connect/certs", v.keycloakURL, v.realm)
+func (v *KeycloakValidator) parseToken(ctx context.Context, rawToken string, refreshKeys bool) (jwt.Token, error) {
+	keySet, err := v.fetchJWKS(ctx, refreshKeys)
+	if err != nil {
+		return nil, err
+	}
+
+	parseOptions := []jwt.ParseOption{
+		jwt.WithKeySet(keySet),
+		jwt.WithValidate(true),
+		jwt.WithIssuer(v.issuer),
+	}
+	if v.audience != "" {
+		parseOptions = append(parseOptions, jwt.WithAudience(v.audience))
+	}
+
+	return jwt.Parse(
+		[]byte(rawToken),
+		parseOptions...,
+	)
 }
 
-func (v *KeycloakValidator) fetchJWKS(ctx context.Context) (jwk.Set, error) {
+func (v *KeycloakValidator) JWKSURL() string {
+	return v.jwksURL
+}
+
+func (v *KeycloakValidator) fetchJWKS(ctx context.Context, forceRefresh bool) (jwk.Set, error) {
 	cacheKey := v.JWKSURL()
+	if !forceRefresh {
+		if value, ok := v.cache.Load(cacheKey); ok {
+			cached := value.(cachedJWKS)
+			if time.Since(cached.fetchedAt) <= time.Hour {
+				return cached.set, nil
+			}
+		}
+	}
+
 	if value, ok := v.cache.Load(cacheKey); ok {
 		cached := value.(cachedJWKS)
-		if time.Since(cached.fetchedAt) <= time.Hour {
+		if !forceRefresh && time.Since(cached.fetchedAt) <= time.Hour {
 			return cached.set, nil
 		}
 	}
 
-	set, err := jwk.Fetch(ctx, cacheKey)
+	fetchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	set, err := jwk.Fetch(fetchCtx, cacheKey)
 	if err != nil {
 		return nil, err
 	}

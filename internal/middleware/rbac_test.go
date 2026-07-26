@@ -71,6 +71,10 @@ func newTestJWKS(t *testing.T) *testJWKS {
 }
 
 func (j *testJWKS) token(t *testing.T, role string, expiresAt time.Time) string {
+	return j.tokenWithAudience(t, role, expiresAt, j.audience)
+}
+
+func (j *testJWKS) tokenWithAudience(t *testing.T, role string, expiresAt time.Time, audience string) string {
 	t.Helper()
 
 	userID := uuid.New()
@@ -79,13 +83,15 @@ func (j *testJWKS) token(t *testing.T, role string, expiresAt time.Time) string 
 		"sub":               userID.String(),
 		"email":             "user@test.com",
 		"iss":               j.issuer,
-		"aud":               j.audience,
 		"iat":               time.Now().Add(-time.Minute).Unix(),
 		"exp":               expiresAt.Unix(),
 		"country_office_id": countryID.String(),
 		"realm_access": map[string]any{
 			"roles": []string{role},
 		},
+	}
+	if audience != "" {
+		claims["aud"] = audience
 	}
 
 	token := jwtv5.NewWithClaims(jwtv5.SigningMethodRS256, claims)
@@ -155,5 +161,27 @@ func TestRequireRoleMiddleware(t *testing.T) {
 				t.Fatalf("error code = %#v, want %s", body.Error, tt.expectedCode)
 			}
 		})
+	}
+}
+
+func TestAuthMiddlewareAcceptsTokenWithoutAudienceWhenAudienceUnset(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	jwks := newTestJWKS(t)
+	defer jwks.server.Close()
+	SetKeycloakValidator(auth.NewKeycloakValidatorWithIssuer("http://unused.local", "htg-crm", jwks.issuer, jwks.server.URL, ""))
+
+	router := gin.New()
+	router.GET("/am-only", AuthMiddleware(), RequireRole(RoleAccountManager), func(c *gin.Context) {
+		response.Success(c, gin.H{"ok": true})
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/am-only", nil)
+	request.Header.Set("Authorization", "Bearer "+jwks.tokenWithAudience(t, RoleAccountManager, time.Now().Add(time.Hour), ""))
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body = %s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
 }

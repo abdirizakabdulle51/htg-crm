@@ -72,7 +72,7 @@ func main() {
 	}
 	defer rabbitPublisher.Close()
 
-	validator := auth.NewKeycloakValidator(cfg.KeycloakURL, cfg.KeycloakRealm, cfg.KeycloakAudience)
+	validator := auth.NewKeycloakValidatorWithIssuer(cfg.KeycloakURL, cfg.KeycloakRealm, cfg.KeycloakIssuer, cfg.KeycloakJWKSURL, cfg.KeycloakAudience)
 	appmiddleware.SetKeycloakValidator(validator)
 	appmiddleware.SetAuditStore(postgresPool, logger)
 	router := gin.New()
