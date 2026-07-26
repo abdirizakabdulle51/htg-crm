@@ -265,7 +265,7 @@ export function Header() {
                 Profile
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => signOut({ redirect: false }).then(() => { window.location.href = "http://localhost:8080/realms/htg-crm/protocol/openid-connect/logout?post_logout_redirect_uri=http%3A%2F%2Flocalhost%3A3000&client_id=crm-frontend"; })}>
+            <DropdownMenuItem onClick={() => signOut({ redirect: false }).then(() => { window.location.href = `${window.location.origin}/api/auth/logout`; })}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign Out
             </DropdownMenuItem>
