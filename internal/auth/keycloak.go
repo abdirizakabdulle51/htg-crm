@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -108,6 +110,34 @@ func (v *KeycloakValidator) JWKSURL() string {
 	return v.jwksURL
 }
 
+func (v *KeycloakValidator) ExpectedIssuer() string {
+	return v.issuer
+}
+
+func (v *KeycloakValidator) TokenIssuerAndKeyID(bearerToken string) (string, string) {
+	rawToken, err := bearerValue(bearerToken)
+	if err != nil {
+		return "", ""
+	}
+
+	parts := strings.Split(rawToken, ".")
+	if len(parts) < 2 {
+		return "", ""
+	}
+
+	var header struct {
+		KeyID string `json:"kid"`
+	}
+	_ = decodeJWTPart(parts[0], &header)
+
+	var claims struct {
+		Issuer string `json:"iss"`
+	}
+	_ = decodeJWTPart(parts[1], &claims)
+
+	return claims.Issuer, header.KeyID
+}
+
 func (v *KeycloakValidator) fetchJWKS(ctx context.Context, forceRefresh bool) (jwk.Set, error) {
 	cacheKey := v.JWKSURL()
 	if !forceRefresh {
@@ -136,6 +166,14 @@ func (v *KeycloakValidator) fetchJWKS(ctx context.Context, forceRefresh bool) (j
 
 	v.cache.Store(cacheKey, cachedJWKS{set: set, fetchedAt: time.Now()})
 	return set, nil
+}
+
+func decodeJWTPart(part string, target any) error {
+	decoded, err := base64.RawURLEncoding.DecodeString(part)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(decoded, target)
 }
 
 func bearerValue(header string) (string, error) {

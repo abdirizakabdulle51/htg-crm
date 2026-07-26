@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/htgclouds/crm-api/internal/auth"
 	"github.com/htgclouds/crm-api/internal/response"
@@ -59,6 +60,14 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		userCtx, err := keycloakValidator.Validate(c.Request.Context(), c.GetHeader("Authorization"))
 		if err != nil {
+			tokenIssuer, keyID := keycloakValidator.TokenIssuerAndKeyID(c.GetHeader("Authorization"))
+			log.Error().
+				Err(err).
+				Str("expected_iss", keycloakValidator.ExpectedIssuer()).
+				Str("token_iss", tokenIssuer).
+				Str("jwks_url", keycloakValidator.JWKSURL()).
+				Str("kid", keyID).
+				Msg("jwt validation failed")
 			response.Error(c, http.StatusUnauthorized, response.CodeUnauthorized, "No valid JWT")
 			c.Abort()
 			return
