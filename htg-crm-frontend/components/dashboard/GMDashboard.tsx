@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import type { KeyboardEvent } from "react";
 import { AlertTriangle, BarChart3, Building2, Target, TrendingUp, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -148,6 +150,7 @@ function leadStage(lead: LeadRow): (typeof STAGES)[number] {
 
 export function GMDashboard() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [country, setCountry] = useState("");
   const [tenantsData, setTenantsData] = useState<Tenant[]>([]);
   const [targetsData, setTargetsData] = useState<TargetsResponse>({});
@@ -315,6 +318,17 @@ export function GMDashboard() {
       })),
     [leads],
   );
+  const clickableProps = (href: string) => ({
+    onClick: () => router.push(href),
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        router.push(href);
+      }
+    },
+    role: "button" as const,
+    tabIndex: 0,
+  });
 
   if (status === "loading" || tenantsLoading) {
     return (
@@ -347,15 +361,18 @@ export function GMDashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <KpiCard icon={Building2} label="Country ARR" value={formatUSD(countryARR)} />
-        <KpiCard icon={Target} label="Q3 Target" value={formatUSD(q3Target)} />
-        <KpiCard icon={TrendingUp} label="Achievement" value={`${achievement.toFixed(1)}%`} />
-        <KpiCard icon={BarChart3} label="Revenue Gap" value={formatUSD(revenueGap)} />
-        <KpiCard icon={Users} label="Active Tenants" value={activeTenants.toString()} />
-        <KpiCard icon={AlertTriangle} label="At-Risk Tenants" value={atRiskTenants.toString()} />
+        <KpiCard href="/gm/tenants" icon={Building2} label="Country ARR" value={formatUSD(countryARR)} />
+        <KpiCard href="/gm/reports" icon={Target} label="Q3 Target" value={formatUSD(q3Target)} />
+        <KpiCard href="/gm/reports" icon={TrendingUp} label="Achievement" value={`${achievement.toFixed(1)}%`} />
+        <KpiCard href="/gm/reports" icon={BarChart3} label="Revenue Gap" value={formatUSD(revenueGap)} />
+        <KpiCard href="/gm/tenants" icon={Users} label="Active Tenants" value={activeTenants.toString()} />
+        <KpiCard href="/gm/risks" icon={AlertTriangle} label="At-Risk Tenants" value={atRiskTenants.toString()} />
       </div>
 
-      <Card className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <Card
+        className="cursor-pointer bg-white rounded-lg shadow-sm border border-gray-200 transition hover:border-[#0A9599]/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2"
+        {...clickableProps("/gm/pipeline")}
+      >
         <CardHeader>
           <CardTitle>Pipeline by Sector</CardTitle>
         </CardHeader>
@@ -393,7 +410,11 @@ export function GMDashboard() {
                 {atRiskRows.map((tenant) => {
                   const risk = tenantRiskScore(tenant);
                   return (
-                    <tr className="border-b last:border-0" key={tenant.id}>
+                    <tr
+                      className="cursor-pointer border-b transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-inset last:border-0"
+                      key={tenant.id}
+                      {...clickableProps("/gm/risks")}
+                    >
                       <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                       <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
                       <td className="py-3 pr-4 text-right">
@@ -413,7 +434,10 @@ export function GMDashboard() {
         </CardContent>
       </Card>
 
-      <Card className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <Card
+        className="cursor-pointer bg-white rounded-lg shadow-sm border border-gray-200 transition hover:border-[#0A9599]/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2"
+        {...clickableProps("/gm/renewals")}
+      >
         <CardHeader>
           <CardTitle>Upcoming Renewals</CardTitle>
         </CardHeader>
@@ -431,7 +455,11 @@ export function GMDashboard() {
               </thead>
               <tbody>
                 {renewalRows.map(({ tenant, days }) => (
-                  <tr className="border-b last:border-0" key={tenant.id}>
+                  <tr
+                    className="cursor-pointer border-b transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-inset last:border-0"
+                    key={tenant.id}
+                    {...clickableProps("/gm/renewals")}
+                  >
                     <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                     <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
                     <td className="py-3 pr-4 text-muted-foreground">{formatDate(tenantRenewalDate(tenant))}</td>
@@ -505,7 +533,11 @@ export function GMDashboard() {
                 {topCustomers.map((tenant) => {
                   const risk = tenantRiskScore(tenant);
                   return (
-                    <tr className="border-b last:border-0" key={tenant.id}>
+                    <tr
+                      className="cursor-pointer border-b transition hover:bg-gray-50 focus:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0A9599] focus:ring-inset last:border-0"
+                      key={tenant.id}
+                      {...clickableProps("/gm/tenants")}
+                    >
                       <td className="py-3 pr-4 font-medium">{tenant.name}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{tenantSector(tenant)}</td>
                       <td className="py-3 pr-4 text-right font-semibold">{formatUSD(tenantARR(tenant))}</td>
@@ -535,7 +567,11 @@ export function GMDashboard() {
         <CardContent>
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
             {stageCounts.map((stage) => (
-              <div className="rounded-lg border bg-background p-4" key={stage.stage}>
+              <div
+                className="cursor-pointer rounded-lg border bg-background p-4 transition hover:border-[#0A9599]/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2"
+                key={stage.stage}
+                {...clickableProps("/gm/pipeline")}
+              >
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{stage.stage}</p>
                 <p className="mt-3 text-2xl font-semibold">{stage.count}</p>
               </div>
@@ -558,16 +594,33 @@ function CoachMetric({ label, value }: { label: string; value: string }) {
 }
 
 function KpiCard({
+  href,
   icon: Icon,
   label,
   value,
 }: {
+  href?: string;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
 }) {
+  const router = useRouter();
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!href) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      router.push(href);
+    }
+  };
+
   return (
-    <Card>
+    <Card
+      className={href ? "cursor-pointer transition hover:border-[#0A9599]/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A9599] focus-visible:ring-offset-2" : ""}
+      onClick={href ? () => router.push(href) : undefined}
+      onKeyDown={handleKeyDown}
+      role={href ? "button" : undefined}
+      tabIndex={href ? 0 : undefined}
+    >
       <CardContent className="flex h-32 flex-col justify-between p-5">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">{label}</p>
