@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/htgclouds/crm-api/internal/auth"
 	"github.com/htgclouds/crm-api/internal/middleware"
 	"github.com/htgclouds/crm-api/internal/response"
 )
@@ -26,12 +25,6 @@ func (h *Handler) List(c *gin.Context) {
 	params := middleware.GetPagination(c)
 	filters, ok := tenantFilters(c)
 	if !ok {
-		return
-	}
-	if shouldReturn, empty := applyGMCountryFilter(c, &filters); !shouldReturn {
-		if empty {
-			response.SuccessList(c, []*Tenant{}, 0, params.Page, params.Limit)
-		}
 		return
 	}
 	items, total, err := h.service.List(c.Request.Context(), filters, params)
@@ -296,20 +289,6 @@ func tenantFilters(c *gin.Context) (TenantFilters, bool) {
 		filters.MinRiskScore = &value
 	}
 	return filters, true
-}
-
-func applyGMCountryFilter(c *gin.Context, filters *TenantFilters) (shouldReturn bool, empty bool) {
-	user, ok := c.Get(auth.UserContextKey)
-	if !ok {
-		return true, false
-	}
-	userCtx, ok := user.(auth.UserContext)
-	if !ok || userCtx.Role != middleware.RoleCountryGM {
-		return true, false
-	}
-
-	filters.CountryID = userCtx.CountryOfficeID
-	return true, false
 }
 
 func optionalUUID(c *gin.Context, key string) (uuid.UUID, bool) {
